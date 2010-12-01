@@ -498,7 +498,7 @@ void CudaCompiler::runPreprocessor(String& cubinFile, String& finalOpts)
     finalOpts += m_options;
 
     String logFile = m_cachePath + "\\preprocess.log";
-    String cmd = sprintf("%s -E -o \"%s\\preprocessed.cu\" -include \"%s\\defines.inl\" %s\"%s\" 2>>\"%s\"",
+    String cmd = sprintf("%s -E -o \"%s\\preprocessed.cu\" -include \"%s\\defines.inl\" %s \"%s\" 2>>\"%s\"",
         s_nvccCommand.getPtr(),
         m_cachePath.getPtr(),
         m_cachePath.getPtr(),
@@ -563,24 +563,20 @@ void CudaCompiler::runPreprocessor(String& cubinFile, String& finalOpts)
     }
 
     // Override SM architecture.
-    // Running on Fermi => requires sm_20.
 
     S32 smArch = m_overriddenSMArch;
-    if (!smArch && CudaModule::getComputeCapability() == 20)
-        smArch = 20;
+    if (!smArch)
+        smArch = CudaModule::getComputeCapability();
 
-    if (smArch)
-    {
         finalOpts = removeOption(finalOpts, "-arch", true);
         finalOpts = removeOption(finalOpts, "--gpu-architecture", true);
         finalOpts += sprintf("-arch sm_%d ", smArch);
-    }
 
     // Override pointer width.
     // CUDA 3.2 => requires -m32 for x86 build and -m64 for x64 build.
 
     if (CudaModule::getDriverVersion() >= 32)
-        {
+    {
         finalOpts = removeOption(finalOpts, "-m32", false);
         finalOpts = removeOption(finalOpts, "-m64", false);
         finalOpts = removeOption(finalOpts, "--machine", true);

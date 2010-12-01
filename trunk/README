@@ -155,7 +155,8 @@ Version history
 ---------------
 
 Version 1.1, Dec 01, 2010
-- Update the codebase to support CUDA 3.2.
+- Upgrade project files to Visual Studio 2008.
+- Update the codebase to support GF104 and CUDA 3.2.
 - Minor stability improvements.
 
 Version 1.0, Feb 17, 2010

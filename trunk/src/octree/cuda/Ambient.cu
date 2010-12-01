@@ -18,7 +18,7 @@
 #include "../io/OctreeRuntime.hpp"
 #include "../io/AttachIO.hpp"
 
-// EMIT_NVCC_OPTIONS -m32 -use_fast_math -arch sm_11
+// EMIT_NVCC_OPTIONS -m32 -use_fast_math
 
 using namespace FW;
 
