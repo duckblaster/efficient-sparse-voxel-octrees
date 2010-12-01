@@ -26,9 +26,6 @@ CudaRenderer::CudaRenderer(void)
 {
     m_compiler.setSourceFile("src/octree/cuda/Render.cu");
     m_compiler.include("src/framework");
-
-    CudaModule::checkError("cuEventCreate", cuEventCreate(&m_startEvent, 0));
-    CudaModule::checkError("cuEventCreate", cuEventCreate(&m_endEvent, 0));
     clearResults();
 }
 
@@ -36,8 +33,6 @@ CudaRenderer::CudaRenderer(void)
 
 CudaRenderer::~CudaRenderer(void)
 {
-    CudaModule::checkError("cuEventDestroy", cuEventDestroy(m_startEvent));
-    CudaModule::checkError("cuEventDestroy", cuEventDestroy(m_endEvent));
 }
 
 //------------------------------------------------------------------------
@@ -156,17 +151,17 @@ String CudaRenderer::renderObject(
 
     OctreeMatrices& om      = m_input.octreeMatrices;
     Vec3f scale             = Vec3f(Vec2f(2.0f) / Vec2f(m_input.frameSize), 1.0f);
-    om.viewportToCamera     = projection.inv().postXlate(Vec3f(-1.0f, -1.0f, 0.0f)).postScale(scale);
-    om.cameraToOctree       = (worldToCamera * octreeToWorld).inv().preXlate(Vec3f(1.0f));
+    om.viewportToCamera     = projection.inverted() * Mat4f::translate(Vec3f(-1.0f, -1.0f, 0.0f)) * Mat4f::scale(scale);
+    om.cameraToOctree       = Mat4f::translate(Vec3f(1.0f)) * (worldToCamera * octreeToWorld).inverted();
     Mat4f vto               = om.cameraToOctree * om.viewportToCamera;
     om.pixelInOctree        = sqrt(Vec4f(vto.col(0)).getXYZ().cross(Vec4f(vto.col(1)).getXYZ()).length());
 
-    om.octreeToWorld        = octreeToWorld.postXlate(Vec3f(-1.0f));
-    om.worldToOctree        = inv(om.octreeToWorld);
-    om.octreeToWorldN       = octreeToWorld.getXYZ().inv().transp();
-    om.cameraPosition       = inv(worldToCamera) * Vec3f(0.f, 0.f, 0.f);
-    om.octreeToViewport     = inv(om.viewportToCamera) * inv(om.cameraToOctree);
-    om.viewportToOctreeN    = (om.octreeToViewport).transp();
+    om.octreeToWorld        = octreeToWorld * Mat4f::translate(Vec3f(-1.0f));
+    om.worldToOctree        = invert(om.octreeToWorld);
+    om.octreeToWorldN       = octreeToWorld.getXYZ().inverted().transposed();
+    om.cameraPosition       = invert(worldToCamera) * Vec3f(0.f, 0.f, 0.f);
+    om.octreeToViewport     = invert(om.viewportToCamera) * invert(om.cameraToOctree);
+    om.viewportToOctreeN    = (om.octreeToViewport).transposed();
 
     // Setup frame-related buffers.
 
@@ -255,7 +250,7 @@ String CudaRenderer::renderObject(
         failIfError();
 
         // find kernel function
-        CUfunction blurKernel = module->getKernel("_Z10blurKernelv", 0);
+        CUfunction blurKernel = module->getKernel("blurKernel", 0);
         if (!blurKernel)
             fail("CudaRenderer: Blur kernel not found!");
 
@@ -273,21 +268,13 @@ String CudaRenderer::renderObject(
 
         // update globals
         *(RenderInput*)module->getGlobal("c_input").getMutablePtr() = m_input;
-        module->setKernelTexRef(blurKernel, "texTempFrameIn", m_tempFrameBuffer, CU_AD_FORMAT_UNSIGNED_INT8, 4);
-        module->setKernelTexRef(blurKernel, "texAASamplesIn", m_aaSampleBuffer, CU_AD_FORMAT_UNSIGNED_INT8, 4);
-        module->updateGlobals();
+        module->setTexRef("texTempFrameIn", m_tempFrameBuffer, CU_AD_FORMAT_UNSIGNED_INT8, 4);
+        module->setTexRef("texAASamplesIn", m_aaSampleBuffer, CU_AD_FORMAT_UNSIGNED_INT8, 4);
 
         // launch
-        CudaModule::sync(false);
-        CudaModule::checkError("cuEventRecord", cuEventRecord(m_startEvent, NULL));
-        module->launchKernel(blurKernel, blockSize, gridSize, true);
-        CudaModule::checkError("cuEventRecord", cuEventRecord(m_endEvent, NULL));
+        blurTime = module->launchKernelTimed(blurKernel, blockSize, gridSize, true);
 
-        // wait
-        CudaModule::sync(true);
-        CudaModule::checkError("cuEventElapsedTime", cuEventElapsedTime(&blurTime, m_startEvent, m_endEvent));
-        blurTime *= 1e-3f;
-    }
+        }
 
     // Update statistics.
 
@@ -453,7 +440,7 @@ CudaRenderer::LaunchResult CudaRenderer::launch(int totalWork, bool persistentTh
 
     CudaModule* module = m_compiler.compile();
     failIfError();
-    CUfunction kernel = module->getKernel("_Z6kernelv", 0);
+    CUfunction kernel = module->getKernel("kernel", 0);
     if (!kernel)
         fail("CudaRenderer: Kernel not found!");
 
@@ -461,30 +448,16 @@ CudaRenderer::LaunchResult CudaRenderer::launch(int totalWork, bool persistentTh
 
     *(RenderInput*)module->getGlobal("c_input").getMutablePtr() = m_input;
     *(S32*)module->getGlobal("g_warpCounter").getMutablePtr() = 0;
-    module->setKernelTexRef(kernel, "texIndexToPixel", m_indexToPixel, CU_AD_FORMAT_UNSIGNED_INT32, 1);
-    module->setKernelTexRef(kernel, "texFrameCoarseIn", m_coarseFrameBuffer, CU_AD_FORMAT_FLOAT, 1);
-    module->setKernelTexRef(kernel, "texIndexToPixelCoarse", m_coarseIndexToPixel, CU_AD_FORMAT_UNSIGNED_INT32, 1);
-    module->updateGlobals();
-    CudaModule::sync(false);
+    module->setTexRef("texIndexToPixel", m_indexToPixel, CU_AD_FORMAT_UNSIGNED_INT32, 1);
+    module->setTexRef("texFrameCoarseIn", m_coarseFrameBuffer, CU_AD_FORMAT_FLOAT, 1);
+    module->setTexRef("texIndexToPixelCoarse", m_coarseIndexToPixel, CU_AD_FORMAT_UNSIGNED_INT32, 1);
 
     // Launch.
 
-    CudaModule::checkError("cuEventRecord", cuEventRecord(m_startEvent, NULL));
-    module->launchKernel(kernel, blockSize, gridSize, true);
-    CudaModule::checkError("cuEventRecord", cuEventRecord(m_endEvent, NULL));
-
-    // Wait.
-
-    if (m_params.measureRaycastPerf)
-        CudaModule::sync(false); // no time to waste
-    else
-        CudaModule::sync(true); // be nice to other threads
+    LaunchResult res;
+    res.time = module->launchKernelTimed(kernel, blockSize, gridSize, true, NULL, (!m_params.measureRaycastPerf));
 
     // Determine results.
-
-    LaunchResult res;
-    CudaModule::checkError("cuEventElapsedTime", cuEventElapsedTime(&res.time, m_startEvent, m_endEvent));
-    res.time *= 1.0e-3f;
 
     const S32* activeWarps = (const S32*)m_activeWarps.getPtr();
     res.numWarps = 0;
@@ -535,11 +508,11 @@ void CudaRenderer::constructBlurLUT(void)
                 float d2 = (d.x*d.x + d.y*d.y);
                 float m  = 1.f/d2;
                 m *= .0001f;
-                f += d.normalize() * m;
+                f += d.normalized() * m;
             }
             float flen = f.length();
             flen = min(flen, .2f);
-            f = f.normalize() * flen;
+            f = f.normalized() * flen;
             force[j] = f;
         }
         for (int j=0; j < N; j++)

@@ -439,7 +439,7 @@ void MeshBase::draw(GLContext* gl, const Mat4f& posToCamera, const Mat4f& projec
     prog->use();
     gl->setUniform(prog->getUniformLoc("posToClip"), projection * posToCamera);
     gl->setUniform(prog->getUniformLoc("posToCamera"), posToCamera);
-    gl->setUniform(prog->getUniformLoc("normalToCamera"), posToCamera.getXYZ().inv().transp());
+    gl->setUniform(prog->getUniformLoc("normalToCamera"), posToCamera.getXYZ().inverted().transposed());
     gl->setUniform(prog->getUniformLoc("hasNormals"), (normalAttrib != -1));
     gl->setUniform(prog->getUniformLoc("diffuseSampler"), 0);
     gl->setUniform(prog->getUniformLoc("alphaSampler"), 1);
@@ -532,7 +532,7 @@ void MeshBase::xformNormals(const Mat3f& mat, bool normalize)
         Vec3f normal = getVertexAttrib(i, normalAttrib).getXYZ();
         normal = mat * normal;
         if (normalize)
-            normal = normal.normalize();
+            normal = normal.normalized();
         setVertexAttrib(i, normalAttrib, Vec4f(normal, 0.0f));
     }
 }
@@ -601,7 +601,7 @@ void MeshBase::recomputeNormals(void)
         Vec3f pos = getVertexAttrib(i, posAttrib).getXYZ();
         Vec3f* normal = posToNormal.search(pos);
         if (normal)
-            setVertexAttrib(i, normalAttrib, Vec4f((*normal).normalize(), 0.0f));
+            setVertexAttrib(i, normalAttrib, Vec4f((*normal).normalized(), 0.0f));
     }
 }
 

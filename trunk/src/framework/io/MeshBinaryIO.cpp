@@ -44,6 +44,7 @@ MeshBase* FW::importBinaryMesh(InputStream& stream)
     case 1:     numTex = 0; break;
     case 2:     numTex = MeshBase::TextureType_Alpha + 1; break;
     case 3:     numTex = MeshBase::TextureType_Displacement + 1; break;
+    case 4:     numTex = MeshBase::TextureType_Environment + 1; break;
     default:    numTex = 0; setError("Unsupported binary mesh version!"); break;
     }
 
@@ -140,7 +141,7 @@ void FW::exportBinaryMesh(OutputStream& stream, const MeshBase* mesh)
 
     // Collapse duplicate textures.
 
-    int numTex = MeshBase::TextureType_Displacement + 1;
+    int numTex = MeshBase::TextureType_Environment + 1;
     Array<Texture> textures;
     Hash<const Image*, S32> texHash;
     texHash.add(NULL, -1);
@@ -162,7 +163,7 @@ void FW::exportBinaryMesh(OutputStream& stream, const MeshBase* mesh)
     // MeshHeader.
 
     stream.write("BinMesh ", 8);
-    stream << (S32)3 << (S32)mesh->numAttribs() << (S32)mesh->numVertices() << (S32)mesh->numSubmeshes() << (S32)textures.getSize();
+    stream << (S32)4 << (S32)mesh->numAttribs() << (S32)mesh->numVertices() << (S32)mesh->numSubmeshes() << (S32)textures.getSize();
 
     // Array of AttribSpec.
 

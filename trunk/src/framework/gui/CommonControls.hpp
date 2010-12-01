@@ -82,6 +82,8 @@ private:
         bool*           boolTarget;
         S32*            enumTarget;
         S32             enumValue;
+        bool*           dirtyNotify;
+
         bool            isButton;
         bool            isSeparator;
         Key*            key;
@@ -99,6 +101,8 @@ private:
     {
         F32*            floatTarget;
         S32*            intTarget;
+        bool*           dirtyNotify;
+
         F32             slack;
         F32             minValue;
         F32             maxValue;
@@ -137,15 +141,15 @@ public:
 
     void            message             (const String& str, const String& volatileID = "");
 
-    void            addToggle           (bool* target, const String& key, const String& title)              { FW_ASSERT(target); addToggle(target, NULL, 0, false, key, title); }
-    void            addToggle           (S32* target, S32 value, const String& key, const String& title)    { FW_ASSERT(target); addToggle(NULL, target, value, false, key, title); }
-    void            addButton           (bool* target, const String& key, const String& title)              { FW_ASSERT(target); addToggle(target, NULL, 0, true, key, title); }
-    void            addButton           (S32* target, S32 value, const String& key, const String& title)    { FW_ASSERT(target); addToggle(NULL, target, value, true, key, title); }
-    void            addSeparator        (void)                                                              { addToggle(NULL, NULL, 0, false, "", ""); }
+    void            addToggle           (bool* target, const String& key, const String& title, bool* dirtyNotify = NULL)            { FW_ASSERT(target); addToggle(target, NULL, 0, false, key, title, dirtyNotify); }
+    void            addToggle           (S32* target, S32 value, const String& key, const String& title, bool* dirtyNotify = NULL)  { FW_ASSERT(target); addToggle(NULL, target, value, false, key, title, dirtyNotify); }
+    void            addButton           (bool* target, const String& key, const String& title, bool* dirtyNotify = NULL)            { FW_ASSERT(target); addToggle(target, NULL, 0, true, key, title, dirtyNotify); }
+    void            addButton           (S32* target, S32 value, const String& key, const String& title, bool* dirtyNotify = NULL)  { FW_ASSERT(target); addToggle(NULL, target, value, true, key, title, dirtyNotify); }
+    void            addSeparator        (void)                                                                                      { addToggle(NULL, NULL, 0, false, "", "", NULL); }
     void            setControlVisibility(bool visible)              { m_controlVisibility = visible; } // applies to next addXxx()
 
-    void            addSlider           (F32* target, F32 minValue, F32 maxValue, bool isExponential, const String& increaseKey, const String& decreaseKey, const String& format, F32 speed = 0.25f) { addSlider(target, NULL, minValue, maxValue, isExponential, increaseKey, decreaseKey, format, speed); }
-    void            addSlider           (S32* target, S32 minValue, S32 maxValue, bool isExponential, const String& increaseKey, const String& decreaseKey, const String& format, F32 speed = 0.0f) { addSlider(NULL, target, (F32)minValue, (F32)maxValue, isExponential, increaseKey, decreaseKey, format, speed); }
+    void            addSlider           (F32* target, F32 minValue, F32 maxValue, bool isExponential, const String& increaseKey, const String& decreaseKey, const String& format, F32 speed = 0.25f, bool* dirtyNotify = NULL) { addSlider(target, NULL, minValue, maxValue, isExponential, increaseKey, decreaseKey, format, speed, dirtyNotify); }
+    void            addSlider           (S32* target, S32 minValue, S32 maxValue, bool isExponential, const String& increaseKey, const String& decreaseKey, const String& format, F32 speed = 0.0f, bool* dirtyNotify = NULL) { addSlider(NULL, target, (F32)minValue, (F32)maxValue, isExponential, increaseKey, decreaseKey, format, speed, dirtyNotify); }
     void            beginSliderStack    (void)                      { m_sliderStackBegun = true; m_sliderStackEmpty = true; }
     void            endSliderStack      (void)                      { m_sliderStackBegun = false; }
 
@@ -173,8 +177,8 @@ private:
     bool            hasFeature          (Feature feature)           { return ((m_features & feature) != 0); }
     void            render              (GLContext* gl);
 
-    void            addToggle           (bool* boolTarget, S32* enumTarget, S32 enumValue, bool isButton, const String& key, const String& title);
-    void            addSlider           (F32* floatTarget, S32* intTarget, F32 minValue, F32 maxValue, bool isExponential, const String& increaseKey, const String& decreaseKey, const String& format, F32 speed);
+    void            addToggle           (bool* boolTarget, S32* enumTarget, S32 enumValue, bool isButton, const String& key, const String& title, bool* dirtyNotify);
+    void            addSlider           (F32* floatTarget, S32* intTarget, F32 minValue, F32 maxValue, bool isExponential, const String& increaseKey, const String& decreaseKey, const String& format, F32 speed, bool* dirtyNotify);
     Key*            getKey              (const String& id);
 
     void            layout              (const Vec2f& viewSize, F32 fontHeight);

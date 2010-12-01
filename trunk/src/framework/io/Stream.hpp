@@ -104,6 +104,8 @@ public:
     void                    writefv                 (const char* fmt, va_list args);
     virtual void            flush                   (void);
 
+    S32                     getNumBytesWritten      (void) const    { return m_numFlushed + m_numValid; }
+
 private:
     void                    addValid                (int size);
     void                    flushInternal           (void);
@@ -121,6 +123,7 @@ private:
     S32                     m_numValid;
     S32                     m_lineStart;
     S32                     m_currOfs;
+    S32                     m_numFlushed;
 };
 
 //------------------------------------------------------------------------

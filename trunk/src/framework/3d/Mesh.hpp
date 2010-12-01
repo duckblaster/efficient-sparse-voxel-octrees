@@ -47,9 +47,11 @@ public:
 
     enum TextureType
     {
-        TextureType_Diffuse = 0,
-        TextureType_Alpha,
-        TextureType_Displacement,
+        TextureType_Diffuse = 0,    // Diffuse color map.
+        TextureType_Alpha,          // Alpha map (green = opacity).
+        TextureType_Displacement,   // Displacement map (green = height).
+        TextureType_Normal,         // Tangent-space normal map.
+        TextureType_Environment,    // Environment map (spherical coordinates).
 
         TextureType_Max
     };
@@ -154,7 +156,7 @@ public:
 
     void                xformPositions      (const Mat4f& mat);
     void                xformNormals        (const Mat3f& mat, bool normalize = true);
-    void                xform               (const Mat4f& mat)              { xformPositions(mat); xformNormals(mat.getXYZ().transp().inv()); }
+    void                xform               (const Mat4f& mat)              { xformPositions(mat); xformNormals(mat.getXYZ().transposed().inverted()); }
 
     void                getBBox             (Vec3f& lo, Vec3f& hi) const;
     void                recomputeNormals    (void);

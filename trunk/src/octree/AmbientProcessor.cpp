@@ -409,7 +409,7 @@ void AmbientProcessor::initiateProcessing(void)
         // thunder and lightning! invoke CUDA
 
         // Find kernel.
-        CUfunction kernel = m_module->getKernel("_Z13ambientKernelv", 0);
+        CUfunction kernel = m_module->getKernel("ambientKernel", 0);
         if (!kernel)
             fail("AmbientProcessor: Kernel not found!");
 
@@ -435,9 +435,9 @@ void AmbientProcessor::initiateProcessing(void)
 
             OctreeMatrices& om  = in.octreeMatrices;
             Mat4f octreeToWorld = m_file->getObject(m_objectID).objectToWorld * m_file->getObject(m_objectID).octreeToObject;
-            om.octreeToWorld    = octreeToWorld.postXlate(Vec3f(-1.0f));
-            om.worldToOctree    = inv(in.octreeMatrices.octreeToWorld);
-            om.octreeToWorldN   = octreeToWorld.getXYZ().inv().transp();
+            om.octreeToWorld    = octreeToWorld * Mat4f::translate(Vec3f(-1.0f));
+            om.worldToOctree    = invert(in.octreeMatrices.octreeToWorld);
+            om.octreeToWorldN   = octreeToWorld.getXYZ().inverted().transposed();
 
             // Determine grid size.
             Vec2i blockSize = Vec2i(AMBK_BLOCK_WIDTH, AMBK_BLOCK_HEIGHT);

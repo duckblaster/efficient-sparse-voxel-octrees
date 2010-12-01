@@ -24,7 +24,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
-#include <string.h>
 #include <malloc.h>
 
 using namespace FW;
@@ -58,8 +57,8 @@ struct ProfileTimer
 static Spinlock                         s_lock;
 static size_t                           s_memoryUsed        = 0;
 static bool                             s_hasFailed         = false;
-static String                           s_error;
 static bool                             s_discardEvents     = false;
+static String                           s_emptyString;
 
 static Array<File*>                     s_logFiles;
 static Array<BufferedOutputStream*>     s_logStreams;
@@ -76,6 +75,13 @@ static Hash<String, S32>                s_profileStringToToken;
 static Hash<Vec2i, S32>                 s_profileTimerHash;         // (parentTimer, childToken) => childTimer
 static Array<ProfileTimer>              s_profileTimers;
 static Array<S32>                       s_profileStack;
+
+//------------------------------------------------------------------------
+
+static void deinitString(void* str)
+{
+    delete (String*)str;
+}
 
 //------------------------------------------------------------------------
 
@@ -175,42 +181,6 @@ void* FW::realloc(void* ptr, size_t size)
 
 //------------------------------------------------------------------------
 
-void* FW::memset(void* dst, int value, size_t size)
-{
-    FW_ASSERT(size >= 0);
-    FW_ASSERT(dst || !size);
-    return ::memset(dst, value, size);
-}
-
-//------------------------------------------------------------------------
-
-void* FW::memcpy(void* dst, const void* src, size_t size)
-{
-    FW_ASSERT(size >= 0);
-    FW_ASSERT((dst && src) || !size);
-    return ::memcpy(dst, src, size);
-}
-
-//------------------------------------------------------------------------
-
-void* FW::memmove(void* dst, const void* src, size_t size)
-{
-    FW_ASSERT(size >= 0);
-    FW_ASSERT((dst && src) || !size);
-    return ::memmove(dst, src, size);
-}
-
-//------------------------------------------------------------------------
-
-int FW::memcmp(const void* srcA, const void* srcB, size_t size)
-{
-    FW_ASSERT(size >= 0);
-    FW_ASSERT((srcA && srcB) || !size);
-    return ::memcmp(srcA, srcB, size);
-}
-
-//------------------------------------------------------------------------
-
 void FW::printf(const char* fmt, ...)
 {
     s_lock.enter();
@@ -241,29 +211,24 @@ String FW::sprintf(const char* fmt, ...)
 
 void FW::setError(const char* fmt, ...)
 {
-    if (!Thread::isMain())
-        fail("setError() must be called from the main thread!");
-
     if (hasError())
         return;
 
+    String* str = new String;
     va_list args;
     va_start(args, fmt);
-    s_error.setfv(fmt, args);
+    str->setfv(fmt, args);
     va_end(args);
 
-    FW_ASSERT(hasError());
+    Thread::getCurrent()->setUserData("error", str, deinitString);
 }
 
 //------------------------------------------------------------------------
 
 String FW::clearError(void)
 {
-    if (!Thread::isMain())
-        fail("clearError() must be called from the main thread!");
-
-    String old = s_error;
-    s_error.reset();
+    String old = getError();
+    Thread::getCurrent()->setUserData("error", NULL);
     return old;
 }
 
@@ -271,11 +236,10 @@ String FW::clearError(void)
 
 bool FW::restoreError(const String& old)
 {
-    if (!Thread::isMain())
-        fail("restoreError() must be called from the main thread!");
-
     bool had = hasError();
-    s_error = old;
+    Thread::getCurrent()->setUserData("error",
+        (old.getLength()) ? new String(old) : NULL,
+        (old.getLength()) ? deinitString : NULL);
     return had;
 }
 
@@ -283,44 +247,56 @@ bool FW::restoreError(const String& old)
 
 bool FW::hasError(void)
 {
-    if (!Thread::isMain())
-        fail("hasError() must be called from the main thread!");
-    return (s_error.getLength() != 0);
+    return (Thread::getCurrent()->getUserData("error") != NULL);
 }
 
 //------------------------------------------------------------------------
 
 const String& FW::getError(void)
 {
-    if (!Thread::isMain())
-        fail("getError() must be called from the main thread!");
-    return s_error;
+    String* str = (String*)Thread::getCurrent()->getUserData("error");
+    return (str) ? *str : s_emptyString;
 }
 
 //------------------------------------------------------------------------
 
 void FW::fail(const char* fmt, ...)
 {
+    // Fail only once.
+
     s_lock.enter();
     bool alreadyFailed = s_hasFailed;
     s_hasFailed = true;
-    setDiscardEvents(true);
     s_lock.leave();
-
     if (alreadyFailed)
         return;
+
+    // Print message.
 
     String tmp;
     va_list args;
     va_start(args, fmt);
     tmp.setfv(fmt, args);
     va_end(args);
+    printf("\n%s\n", tmp.getPtr());
 
-    printf("%s\n", tmp.getPtr());
+    // Try to prevent any user code from being executed.
+
+    Thread::suspendAll();
+    setDiscardEvents(true);
+
+    // Display modal dialog.
+
     MessageBox(NULL, tmp.getPtr(), "Fatal error", MB_OK);
 
-    DebugBreak();
-    exit(1);
+    // Running under a debugger => break here.
+
+    if (IsDebuggerPresent())
+        __debugbreak();
+
+    // Kill the app.
+
+    FatalExit(1);
 }
 
 //------------------------------------------------------------------------
@@ -343,10 +319,8 @@ void FW::failWin32Error(const char* funcName)
 
 void FW::failIfError(void)
 {
-    if (!Thread::isMain())
-        fail("failIfError() must be called from the main thread!");
     if (hasError())
-        fail("%s", s_error.getPtr());
+        fail("%s", getError().getPtr());
 }
 
 //------------------------------------------------------------------------
@@ -369,28 +343,31 @@ bool FW::getDiscardEvents(void)
 
 void FW::pushLogFile(const String& name, bool append)
 {
+    s_lock.enter();
     File* file = new File(name, (append) ? File::Modify : File::Create);
     file->seek(file->getSize());
     s_logFiles.add(file);
     s_logStreams.add(new BufferedOutputStream(*file, 1024, true, true));
+    s_lock.leave();
 }
 
 //------------------------------------------------------------------------
 
 void FW::popLogFile(void)
 {
-    if (!s_logFiles.getSize())
-        return;
-
+    s_lock.enter();
+    if (s_logFiles.getSize())
+    {
     s_logStreams.getLast()->flush();
     delete s_logFiles.removeLast();
     delete s_logStreams.removeLast();
-
     if (!s_logFiles.getSize())
     {
         s_logFiles.reset();
         s_logStreams.reset();
     }
+}
+    s_lock.leave();
 }
 
 //------------------------------------------------------------------------
@@ -504,7 +481,7 @@ void FW::printMemStats(void)
 void FW::profileStart(void)
 {
     if (!Thread::isMain())
-        fail("profileStart() must be called from the main thread!");
+        fail("profileStart() can only be used in the main thread!");
     if (s_profileStarted)
         return;
 
@@ -519,7 +496,7 @@ void FW::profilePush(const char* id)
     if (!s_profileStarted)
         return;
     if (!Thread::isMain())
-        fail("profilePush() must be called from the main thread!");
+        fail("profilePush() can only be used in the main thread!");
 
     // Find or create token.
 
@@ -577,7 +554,7 @@ void FW::profilePop(void)
     if (!s_profileStarted)
         return;
     if (!Thread::isMain())
-        fail("profilePop() must be called from the main thread!");
+        fail("profilePop() can only be used in the main thread!");
 
     if (s_profileStack.getSize() > 1)
         s_profileTimers[s_profileStack.getLast()].timer.end();
@@ -591,7 +568,7 @@ void FW::profilePop(void)
 void FW::profileEnd(void)
 {
     if (!Thread::isMain())
-        fail("profileEnd() must be called from the main thread!");
+        fail("profileEnd() can only be used in the main thread!");
     if (!s_profileStarted)
         return;
 

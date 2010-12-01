@@ -15,21 +15,35 @@
  */
  
 #include "base/Sort.hpp"
+#include "base/MulticoreLauncher.hpp"
 
 using namespace FW;
 
 //------------------------------------------------------------------------
 
 #define QSORT_STACK_SIZE    32
+#define QSORT_MIN_SIZE      16
+#define MULTICORE_MIN_SIZE  (1 << 14)
 
 //------------------------------------------------------------------------
 
 namespace FW
 {
 
+struct TaskSpec
+{
+    S32             low;
+    S32             high;
+    void*           data;
+    SortCompareFunc compareFunc;
+    SortSwapFunc    swapFunc;
+};
+
 static inline void  insertionSort   (int start, int size, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc);
 static inline int   median3         (int low, int high, void* data, SortCompareFunc compareFunc);
+static int          partition       (int low, int high, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc);
 static void         qsort           (int low, int high, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc);
+static void         qsortMulticore  (MulticoreLauncher::Task& task);
 
 }
 
@@ -69,34 +83,13 @@ int FW::median3(int low, int high, void* data, SortCompareFunc compareFunc)
 
 //------------------------------------------------------------------------
 
-void FW::qsort(int low, int high, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc)
-{
-    FW_ASSERT(compareFunc && swapFunc);
-    FW_ASSERT(low <= high);
-
-    int stack[QSORT_STACK_SIZE];
-    int sp = 0;
-    stack[sp++] = high;
-
-    while (sp)
-    {
-        high = stack[--sp];
-        FW_ASSERT(low <= high);
-
-        /* Use insertion sort for small values or if stack gets full. */
-
-        if (high - low <= 15 || sp + 2 > QSORT_STACK_SIZE)
+int FW::partition(int low, int high, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc)
         {
-            insertionSort(low, high - low, data, compareFunc, swapFunc);
-            low = high + 1;
-            continue;
-        }
-
-        /* Select pivot using median-3, and hide it in the highest entry */
+        // Select pivot using median-3, and hide it in the highest entry.
 
         swapFunc(data, median3(low, high, data, compareFunc), high - 1);
 
-        /* Partition data */
+        // Partition data.
 
         int i = low - 1;
         int j = high - 1;
@@ -116,12 +109,40 @@ void FW::qsort(int low, int high, void* data, SortCompareFunc compareFunc, SortS
             swapFunc(data, i, j);
         }
 
-        /* Restore pivot */
+        // Restore pivot.
 
         swapFunc(data, i, high - 1);
+    return i;
+}
 
-        /* Sort sub-partitions */
+//------------------------------------------------------------------------
 
+void FW::qsort(int low, int high, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc)
+{
+    FW_ASSERT(compareFunc && swapFunc);
+    FW_ASSERT(low <= high);
+
+    int stack[QSORT_STACK_SIZE];
+    int sp = 0;
+    stack[sp++] = high;
+
+    while (sp)
+    {
+        high = stack[--sp];
+        FW_ASSERT(low <= high);
+
+        // Small enough or stack full => use insertion sort.
+
+        if (high - low < QSORT_MIN_SIZE || sp + 2 > QSORT_STACK_SIZE)
+        {
+            insertionSort(low, high - low, data, compareFunc, swapFunc);
+            low = high + 1;
+            continue;
+        }
+
+        // Partition and sort sub-partitions.
+
+        int i = partition(low, high, data, compareFunc, swapFunc);
         FW_ASSERT(sp + 2 <= QSORT_STACK_SIZE);
         if (high - i > 2)
             stack[sp++] = high;
@@ -134,13 +155,71 @@ void FW::qsort(int low, int high, void* data, SortCompareFunc compareFunc, SortS
 
 //------------------------------------------------------------------------
 
+void FW::qsortMulticore(MulticoreLauncher::Task& task)
+{
+    // Small enough => use sequential qsort.
+
+    TaskSpec* spec = (TaskSpec*)task.data;
+    if (spec->high - spec->low < MULTICORE_MIN_SIZE)
+        qsort(spec->low, spec->high, spec->data, spec->compareFunc, spec->swapFunc);
+
+    // Otherwise => partition and schedule sub-partitions.
+
+    else
+    {
+        int i = partition(spec->low, spec->high, spec->data, spec->compareFunc, spec->swapFunc);
+        if (i - spec->low >= 2)
+        {
+            TaskSpec* childSpec = new TaskSpec(*spec);
+            childSpec->high = i;
+            task.launcher->push(qsortMulticore, childSpec);
+        }
+        if (spec->high - i > 2)
+        {
+            TaskSpec* childSpec = new TaskSpec(*spec);
+            childSpec->low = i + 1;
+            task.launcher->push(qsortMulticore, childSpec);
+        }
+    }
+
+    // Free task spec.
+
+    delete spec;
+}
+
+//------------------------------------------------------------------------
+
 void FW::sort(int start, int end, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc)
 {
     FW_ASSERT(start <= end);
     FW_ASSERT(compareFunc && swapFunc);
+    if (end - start < 2)
+        return;
 
-    if (start + 2 <= end)
         qsort(start, end, data, compareFunc, swapFunc);
+}
+
+//------------------------------------------------------------------------
+
+void FW::sortMulticore(int start, int end, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc)
+{
+    FW_ASSERT(start <= end);
+    FW_ASSERT(compareFunc && swapFunc);
+    if (end - start < 2)
+        return;
+
+    TaskSpec* spec = new TaskSpec;
+    spec->low = start;
+    spec->high = end;
+    spec->data = data;
+    spec->compareFunc = compareFunc;
+    spec->swapFunc = swapFunc;
+
+    MulticoreLauncher launcher;
+    MulticoreLauncher::Task task;
+    task.launcher = &launcher;
+    task.data = spec;
+    qsortMulticore(task);
 }
 
 //------------------------------------------------------------------------

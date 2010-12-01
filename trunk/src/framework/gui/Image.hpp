@@ -165,6 +165,8 @@ public:
     void                flipY           (void);
 
     GLuint              createGLTexture (ImageFormat::ID desiredFormat = ImageFormat::ID_Max, bool generateMipmaps = true) const;
+    CUarray             createCudaArray (ImageFormat::ID desiredFormat = ImageFormat::ID_Max) const;
+    Image*              downscale2x     (void) const; // Returns ImageFormat::ABGR_8888, or NULL if size <= 1x1.
 
     Image&              operator=       (const Image& other)                { if (&other != this) set(other); return *this; }
 

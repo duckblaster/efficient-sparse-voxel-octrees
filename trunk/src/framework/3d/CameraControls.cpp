@@ -41,7 +41,7 @@ CameraControls::CameraControls(CommonControls* commonControls, U32 features)
     m_alignZ            (false)
 {
     initDefaults();
-    if (!GLContext::isStereoAvailable())
+    if ((m_features & Feature_StereoControls) != 0 && !GLContext::isStereoAvailable())
         m_features &= ~Feature_StereoControls;
 }
 
@@ -109,6 +109,7 @@ bool CameraControls::handleEvent(const Window::Event& ev)
             Vec3f delta = Vec3f((F32)ev.mouseDelta.x, (F32)-ev.mouseDelta.y, 0.0f);
             if (m_dragLeft)     rotate += delta * s_mouseRotateSpeed;
             if (m_dragMiddle)   move += delta * m_speed * s_mouseStrafeSpeed;
+            if (m_dragRight)    move += Vec3f(0.0f, 0.0f, (F32)ev.mouseDelta.y) * m_speed * s_mouseStrafeSpeed;
         }
         break;
 
@@ -150,16 +151,16 @@ bool CameraControls::handleEvent(const Window::Event& ev)
     if (rotate.x != 0.0f || rotate.y != 0.0f)
     {
         Vec3f tmp = orient.col(2) * cos(rotate.x) - orient.col(0) * sin(rotate.x);
-        m_forward = (orient.col(1) * sin(rotate.y) - tmp * cos(rotate.y)).normalize();
+        m_forward = (orient.col(1) * sin(rotate.y) - tmp * cos(rotate.y)).normalized();
         if (!m_keepAligned)
-            m_up = (orient.col(1) * cos(rotate.y) + tmp * sin(rotate.y)).normalize();
-        else if (-m_forward.cross(m_up).dot(tmp.cross(m_up).normalize()) < s_inclinationLimit)
-            m_forward = -tmp.normalize();
+            m_up = (orient.col(1) * cos(rotate.y) + tmp * sin(rotate.y)).normalized();
+        else if (-m_forward.cross(m_up).dot(tmp.cross(m_up).normalized()) < s_inclinationLimit)
+            m_forward = -tmp.normalized();
     }
 
     if (rotate.z != 0.0f && !m_keepAligned)
     {
-        Vec3f up = orient.transp() * m_up;
+        Vec3f up = orient.transposed() * m_up;
         m_up = orient * Vec3f(up.x * cos(rotate.z) - sin(rotate.z), up.x * sin(rotate.z) + up.y * cos(rotate.z), up.z);
     }
 
@@ -231,9 +232,9 @@ void CameraControls::writeState(StateDump& d) const
 Mat3f CameraControls::getOrientation(void) const
 {
     Mat3f r;
-    r.col(2) = -m_forward.normalize();
-    r.col(0) = m_up.cross(r.col(2)).normalize();
-    r.col(1) = ((Vec3f)r.col(2)).cross(r.col(0)).normalize();
+    r.col(2) = -m_forward.normalized();
+    r.col(0) = m_up.cross(r.col(2)).normalized();
+    r.col(1) = ((Vec3f)r.col(2)).cross(r.col(0)).normalized();
     return r;
 }
 
@@ -255,7 +256,7 @@ Mat4f CameraControls::getCameraToWorld(void) const
 Mat4f CameraControls::getWorldToCamera(void) const
 {
     Mat3f orient = getOrientation();
-    Vec3f pos = orient.transp() * m_position;
+    Vec3f pos = orient.transposed() * m_position;
     Mat4f r;
     r.setRow(0, Vec4f(orient.col(0), -pos.x));
     r.setRow(1, Vec4f(orient.col(1), -pos.y));
@@ -331,7 +332,7 @@ String CameraControls::encodeSignature(void) const
 void CameraControls::decodeSignature(const String& sig)
 {
     const char* src = sig.getPtr();
-    while (*src == ' ' || *src == '\t') src++;
+    while (*src == ' ' || *src == '\t' || *src == '\n') src++;
     if (*src == '"') src++;
 
     F32   px          = decodeFloat(src);
@@ -347,7 +348,7 @@ void CameraControls::decodeSignature(const String& sig)
 
     if (*src == '"') src++;
     if (*src == ',') src++;
-    while (*src == ' ' || *src == '\t') src++;
+    while (*src == ' ' || *src == '\t' || *src == '\n') src++;
     if (*src)
         setError("CameraControls: Invalid signature!");
 
@@ -381,7 +382,7 @@ void CameraControls::addGUIControls(void)
 
     cc.beginSliderStack();
     if (hasFeature(Feature_FOVSlider))
-        cc.addSlider(&m_fov, 0.0f, 179.0f, false, FW_KEY_NONE, FW_KEY_NONE, "Camera FOV = %.1f degrees", 0.2f);
+        cc.addSlider(&m_fov, 1.0f, 179.0f, false, FW_KEY_NONE, FW_KEY_NONE, "Camera FOV = %.1f degrees", 0.2f);
     if (hasFeature(Feature_NearSlider))
         cc.addSlider(&m_near, 1.0e-3f, 1.0e6f, true, FW_KEY_NONE, FW_KEY_NONE, "Camera near = %g units", 0.05f);
     if (hasFeature(Feature_FarSlider))
@@ -488,7 +489,7 @@ Vec3f CameraControls::decodeDirection(const char*& src)
     tuv.x = ((face & 4) == 0) ? 1.0f : -1.0f;
     tuv.y = ((face & 8) == 0) ? decodeFloat(src) : 0.0f;
     tuv.z = ((face & 8) == 0) ? decodeFloat(src) : 0.0f;
-    tuv = tuv.normalize();
+    tuv = tuv.normalized();
 
     switch (face & 3)
     {

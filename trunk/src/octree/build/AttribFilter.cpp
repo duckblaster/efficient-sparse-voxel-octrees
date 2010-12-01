@@ -32,7 +32,7 @@ void AttribFilter::Value::encode(S32* dataOut, Vec4f& colorOut, Vec3f& normalOut
     colorOut = getColor() * rcp(getWeight());
     dataOut[DataItem_Color] = colorOut.toABGR();
 
-    normalOut = getNormal().normalize();
+    normalOut = getNormal().normalized();
     dataOut[DataItem_Normal] = encodeRawNormal(normalOut);
 }
 
@@ -42,7 +42,7 @@ void AttribFilter::Value::decode(const S32* data)
 {
     setWeight(1.0f);
     setColor(Vec4f::fromABGR(data[DataItem_Color]));
-    setNormal(Vec3f(decodeRawNormal(data[DataItem_Normal])).normalize());
+    setNormal(Vec3f(decodeRawNormal(data[DataItem_Normal])).normalized());
 }
 
 //------------------------------------------------------------------------

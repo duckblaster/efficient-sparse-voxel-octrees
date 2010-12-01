@@ -22,7 +22,7 @@ using namespace FW;
 
 //------------------------------------------------------------------------
 
-#define WAVEFRONT_DEBUG 0
+#define WAVEFRONT_DEBUG 0   // 1 = fail on error, 0 = ignore errors
 
 //------------------------------------------------------------------------
 
@@ -135,6 +135,16 @@ bool FW::parseTexture(const char*& ptr, TextureSpec& value, const String& dirNam
             if (!parseFloat(ptr, tmp))
                 return false;
         }
+        else if (parseLiteral(ptr, "-type ") && parseSpace(ptr))
+        {
+            if (!parseLiteral(ptr, "sphere") &&
+                !parseLiteral(ptr, "cube_top") && !parseLiteral(ptr, "cube_bottom") &&
+                !parseLiteral(ptr, "cube_front") && !parseLiteral(ptr, "cube_back") &&
+                !parseLiteral(ptr, "cube_left") && !parseLiteral(ptr, "cube_right"))
+            {
+                return false;
+            }
+        }
         else
         {
             if (*ptr == '-' || name.getLength())
@@ -165,10 +175,10 @@ bool FW::parseTexture(const char*& ptr, TextureSpec& value, const String& dirNam
 void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirName)
 {
     Material* mat = NULL;
-    while (!hasError())
+    for (;;)
     {
         const char* line = mtlIn.readLine(true, true);
-        if (!line)
+        if (!line || hasError())
             break;
 
         const char* ptr = line;
@@ -242,8 +252,7 @@ void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirNa
             valid = parseTexture(ptr, tex, dirName);
             mat->textures[MeshBase::TextureType_Alpha] = tex.texture;
         }
-        else if (parseLiteral(ptr, "bump ") || parseLiteral(ptr, "map_bump ") || parseLiteral(ptr, "map_Bump ") || // bump map
-                 parseLiteral(ptr, "disp ")) // displacement map
+        else if (parseLiteral(ptr, "disp ")) // displacement map
         {
             TextureSpec tex;
             valid = parseTexture(ptr, tex, dirName);
@@ -251,9 +260,20 @@ void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirNa
             mat->displacementBias = tex.base * tex.gain;
             mat->textures[MeshBase::TextureType_Displacement] = tex.texture;
         }
-        else
-#if WAVEFRONT_DEBUG
-        if (parseLiteral(ptr, "vp ") ||             // parameter space vertex
+        else if (parseLiteral(ptr, "bump ") || parseLiteral(ptr, "map_bump ") || parseLiteral(ptr, "map_Bump ")) // bump map
+        {
+            TextureSpec tex;
+            valid = parseTexture(ptr, tex, dirName);
+            mat->textures[MeshBase::TextureType_Normal] = tex.texture;
+        }
+        else if (parseLiteral(ptr, "refl ")) // environment map
+        {
+            TextureSpec tex;
+            valid = parseTexture(ptr, tex, dirName);
+            mat->textures[MeshBase::TextureType_Environment] = tex.texture;
+        }
+        else if (
+            parseLiteral(ptr, "vp ") ||             // parameter space vertex
             parseLiteral(ptr, "Kf ") ||             // transmission color
             parseLiteral(ptr, "illum ") ||          // illumination model
             parseLiteral(ptr, "d -halo ") ||        // orientation-dependent alpha
@@ -263,8 +283,6 @@ void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirNa
             parseLiteral(ptr, "map_Ns ") ||         // glossiness texture
             parseLiteral(ptr, "map_aat ") ||        // texture antialiasing
             parseLiteral(ptr, "decal ") ||          // blended texture
-            parseLiteral(ptr, "disp ") ||           // displacement texture
-            parseLiteral(ptr, "refl ") ||           // reflection texture
             parseLiteral(ptr, "Km ") ||             // ???
             parseLiteral(ptr, "Tr ") ||             // ???
             parseLiteral(ptr, "Tf ") ||             // ???
@@ -273,13 +291,16 @@ void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirNa
             parseLiteral(ptr, "pointdensity ") ||   // ???
             parseLiteral(ptr, "smooth") ||          // ???
             parseLiteral(ptr, "R "))                // ???
-#endif
         {
             valid = true;
         }
 
         if (!valid)
             setError("Invalid line in Wavefront MTL: '%s'!", line);
+
+#if (!WAVEFRONT_DEBUG)
+        clearError();
+#endif
     }
 }
 
@@ -289,10 +310,10 @@ void FW::loadObj(ImportState& s, BufferedInputStream& objIn, const String& dirNa
 {
     int submesh = -1;
     int defaultSubmesh = -1;
-    while (!hasError())
+    for (;;)
     {
         const char* line = objIn.readLine(true, true);
-        if (!line)
+        if (!line || hasError())
             break;
 
         const char* ptr = line;
@@ -418,15 +439,11 @@ void FW::loadObj(ImportState& s, BufferedInputStream& objIn, const String& dirNa
                 File file(fileName, File::Read);
                 BufferedInputStream mtlIn(file);
                 loadMtl(s, mtlIn, fileName.getDirName());
-#if (!WAVEFRONT_DEBUG)
-                clearError();
-#endif
             }
             valid = true;
         }
-        else
-#if WAVEFRONT_DEBUG
-        if (parseLiteral(ptr, "vp ") ||         // parameter space vertex
+        else if (
+            parseLiteral(ptr, "vp ") ||         // parameter space vertex
             parseLiteral(ptr, "deg ") ||        // degree
             parseLiteral(ptr, "bmat ") ||       // basis matrix
             parseLiteral(ptr, "step ") ||       // step size
@@ -456,13 +473,16 @@ void FW::loadObj(ImportState& s, BufferedInputStream& objIn, const String& dirNa
             parseLiteral(ptr, "ctech ") ||      // curve approximation technique
             parseLiteral(ptr, "stech ") ||      // surface approximation technique
             parseLiteral(ptr, "g"))             // ???
-#endif
         {
             valid = true;
         }
 
         if (!valid)
             setError("Invalid line in Wavefront OBJ: '%s'!", line);
+
+#if (!WAVEFRONT_DEBUG)
+        clearError();
+#endif
     }
 }
 
@@ -612,6 +632,12 @@ void FW::exportWavefrontMesh(BufferedOutputStream& stream, const MeshBase* mesh,
             mtlOut.writef("disp -mm %g %g %s\n",
                 mat.displacementBias / mat.displacementCoef, mat.displacementCoef,
                 texImageHash[mat.textures[MeshBase::TextureType_Displacement].getImage()].getPtr());
+
+        if (texImageHash.contains(mat.textures[MeshBase::TextureType_Normal].getImage()))
+            mtlOut.writef("bump %s\n", texImageHash[mat.textures[MeshBase::TextureType_Normal].getImage()].getPtr());
+
+        if (texImageHash.contains(mat.textures[MeshBase::TextureType_Environment].getImage()))
+            mtlOut.writef("refl -type sphere %s\n", texImageHash[mat.textures[MeshBase::TextureType_Environment].getImage()].getPtr());
     }
     mtlOut.flush();
 

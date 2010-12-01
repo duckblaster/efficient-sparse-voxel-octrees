@@ -646,7 +646,7 @@ void MeshBuilder::ThreadState::sampleAttribs(
             texHi.x = max(texHi.x, t.x);
             texHi.y = max(texHi.y, t.y);
 
-            Vec3f n = (tri.n + tri.nu * bary[i].x + tri.nv * bary[i].y).normalize();
+            Vec3f n = (tri.n + tri.nu * bary[i].x + tri.nv * bary[i].y).normalized();
             for (int j = 0; j < 3; j++)
             {
                 normal.lo[j] = fastMin(normal.lo[j], n[j]);
@@ -1042,7 +1042,7 @@ void MeshBuilder::ThreadState::flushDXTBlock(void)
         const AttribFilter::Value& value = m_filter->outputEnd();
 
         colors[num] = value.getColor().getXYZ() * rcp(value.getWeight());
-        normals[num] = value.getNormal().normalize();
+        normals[num] = value.getNormal().normalized();
         indices[num] = i;
         num++;
     }
@@ -1071,7 +1071,7 @@ void MeshBuilder::ThreadState::flushDXTBlock(void)
     for (int i = 0; i < 16; i++)
     {
         int idx = m_dxtVoxels[i];
-        if (idx != -1 && checkPaletteAttribs(m_voxelDatas[idx], Vec4f(colors[i], 1.0f), normals[i].normalize()))
+        if (idx != -1 && checkPaletteAttribs(m_voxelDatas[idx], Vec4f(colors[i], 1.0f), normals[i].normalized()))
             m_voxelHeaders[idx].flags |= Voxel_RefineAttribs;
     }
 }

@@ -150,8 +150,6 @@ private:
 
     String              m_stats;
     Params              m_params;
-    CUevent             m_startEvent;
-    CUevent             m_endEvent;
 
     Results             m_results;
 };

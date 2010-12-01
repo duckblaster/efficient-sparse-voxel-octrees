@@ -26,7 +26,7 @@ using namespace FW;
 // Global variables.
 //------------------------------------------------------------------------
 
-__constant__ U32 c_input[(sizeof(AmbientInput) + sizeof(U32) - 1) / sizeof(U32)];
+__constant__ int4 c_input[(sizeof(AmbientInput) + sizeof(int4) - 1) / sizeof(int4)];
 __device__ S32 g_warpCounter;
 
 //------------------------------------------------------------------------
@@ -116,7 +116,7 @@ __constant__ S32 c_aotable[256] = {
 
 //------------------------------------------------------------------------
 
-__global__ void ambientKernel(void)
+extern "C" __global__ void ambientKernel(void)
 {
     const AmbientInput& input = getInput();
     __shared__ Aux auxbuf[AMBK_BLOCK_WIDTH * AMBK_BLOCK_HEIGHT];
@@ -197,9 +197,9 @@ __global__ void ambientKernel(void)
             float4 color; // dummy
             float3 normal;
             lookupVoxelColorNormal(color, normal, castRes, stack);
-            normal = normalize(normal);
-            float nlen = 1.f / fmaxf3(fabsf(normal.x), fabsf(normal.y), fabsf(normal.z));
-            orig += normal * (vsize * nlen);
+                normal = normalize(normal);
+                float nlen = 1.f / fmaxf3(fabsf(normal.x), fabsf(normal.y), fabsf(normal.z));
+                orig += normal * (vsize * nlen);
 
             F3COPY(aux.normal, normal);
             F3COPY(aux.orig, orig);

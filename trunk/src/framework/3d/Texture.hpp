@@ -32,6 +32,8 @@ private:
         bool        isInHash;
         Image*      image;
         GLuint      glTexture;
+        CUarray     cudaArray;
+        Texture*    nextMip;
     };
 
 public:
@@ -46,10 +48,14 @@ public:
     bool            exists          (void) const                            { return (m_data && m_data->image && m_data->image->getSize().min() > 0); }
     String          getID           (void) const                            { return (m_data) ? m_data->id : ""; }
     const Image*    getImage        (void) const                            { return (m_data) ? m_data->image : NULL; }
-    GLuint          getGLTexture    (const ImageFormat::ID desiredFormat = ImageFormat::ID_Max, bool generateMipmaps = true) const;
+    Vec2i           getSize         (void) const                            { return (exists()) ? getImage()->getSize() : 0; }
 
     void            clear           (void)                                  { if (m_data) unreferData(m_data); m_data = NULL; }
     void            set             (const Texture& other);
+
+    GLuint          getGLTexture    (const ImageFormat::ID desiredFormat = ImageFormat::ID_Max, bool generateMipmaps = true) const;
+    CUarray         getCudaArray    (const ImageFormat::ID desiredFormat = ImageFormat::ID_Max) const;
+    Texture         getMipLevel     (int level, bool generateByGL = true) const;
 
     Texture&        operator=       (const Texture& other)                  { set(other); return *this; }
     bool            operator==      (const Texture& other) const            { return (m_data == other.m_data); }

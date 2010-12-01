@@ -287,11 +287,12 @@ void GLContext::setView(const Vec2i& pos, const Vec2i& size)
 
 Mat4f GLContext::xformMouseToUser(const Mat4f& userToClip) const
 {
-    return userToClip.inv()
-        .postScale(Vec3f(1.0f, -1.0f, 1.0f))
-        .postXlate(Vec3f(-1.0f, -1.0f, 0.0f))
-        .postScale(Vec3f(m_viewScale, 1.0f))
-        .postXlate(Vec3f(0.5f, 0.5f, 0.0f));
+    return
+        userToClip.inverted() *
+        Mat4f::scale(Vec3f(1.0f, -1.0f, 1.0f)) *
+        Mat4f::translate(Vec3f(-1.0f, -1.0f, 0.0f)) *
+        Mat4f::scale(Vec3f(m_viewScale, 1.0f)) *
+        Mat4f::translate(Vec3f(0.5f, 0.5f, 0.0f));
 }
 
 //------------------------------------------------------------------------
@@ -323,11 +324,11 @@ void GLContext::strokeLine(const Vec4f& p0, const Vec4f& p1, U32 abgr)
 {
     Vec4f v0 = m_vgXform * p0;
     Vec4f v1 = m_vgXform * p1;
-    Vec2f dir = (v1.getXY() / v1.w - v0.getXY() / v0.w).normalize();
+    Vec2f dir = (v1.getXY() / v1.w - v0.getXY() / v0.w).normalized();
     Vec4f x0 = Vec4f(dir * m_viewScale * v0.w, 0.0f, 0.0f);
-    Vec4f y0 = Vec4f(dir.perp() * m_viewScale * v0.w, 0.0f, 0.0f);
+    Vec4f y0 = Vec4f(dir.perpendicular() * m_viewScale * v0.w, 0.0f, 0.0f);
     Vec4f x1 = Vec4f(dir * m_viewScale * v1.w, 0.0f, 0.0f);
-    Vec4f y1 = Vec4f(dir.perp() * m_viewScale * v1.w, 0.0f, 0.0f);
+    Vec4f y1 = Vec4f(dir.perpendicular() * m_viewScale * v1.w, 0.0f, 0.0f);
 
     VGVertex vertices[] =
     {
@@ -346,8 +347,8 @@ void GLContext::strokeLine(const Vec4f& p0, const Vec4f& p1, U32 abgr)
 void GLContext::fillRect(const Vec4f& pos, const Vec2f& localSize, const Vec2f& screenSize, U32 abgr)
 {
     Vec4f v0 = m_vgXform * pos;
-    Vec4f x1 = Vec4f(Vec4f(m_vgXform.getCol(0)).getXY().normalize() * m_viewScale, 0.0f, 0.0f);
-    Vec4f y1 = Vec4f(Vec4f(m_vgXform.getCol(1)).getXY().normalize() * m_viewScale, 0.0f, 0.0f);
+    Vec4f x1 = Vec4f(Vec4f(m_vgXform.getCol(0)).getXY().normalized() * m_viewScale, 0.0f, 0.0f);
+    Vec4f y1 = Vec4f(Vec4f(m_vgXform.getCol(1)).getXY().normalized() * m_viewScale, 0.0f, 0.0f);
     Vec4f x0 = (m_vgXform * Vec4f(localSize.x, 0.0f, 0.0f, 0.0f) + x1 * (screenSize.x - 1.0f)) * 0.5f;
     Vec4f y0 = (m_vgXform * Vec4f(0.0f, localSize.y, 0.0f, 0.0f) + y1 * (screenSize.y - 1.0f)) * 0.5f;
 
@@ -372,8 +373,8 @@ void GLContext::fillRect(const Vec4f& pos, const Vec2f& localSize, const Vec2f& 
 void GLContext::strokeRect(const Vec4f& pos, const Vec2f& localSize, const Vec2f& screenSize, U32 abgr)
 {
     Vec4f v0 = m_vgXform * pos;
-    Vec4f x1 = Vec4f(Vec4f(m_vgXform.getCol(0)).getXY().normalize() * m_viewScale, 0.0f, 0.0f);
-    Vec4f y1 = Vec4f(Vec4f(m_vgXform.getCol(1)).getXY().normalize() * m_viewScale, 0.0f, 0.0f);
+    Vec4f x1 = Vec4f(Vec4f(m_vgXform.getCol(0)).getXY().normalized() * m_viewScale, 0.0f, 0.0f);
+    Vec4f y1 = Vec4f(Vec4f(m_vgXform.getCol(1)).getXY().normalized() * m_viewScale, 0.0f, 0.0f);
     Vec4f x0 = (m_vgXform * Vec4f(localSize.x, 0.0f, 0.0f, 0.0f) + x1 * screenSize.x) * 0.5f;
     Vec4f y0 = (m_vgXform * Vec4f(0.0f, localSize.y, 0.0f, 0.0f) + y1 * screenSize.y) * 0.5f;
 
@@ -510,7 +511,7 @@ void GLContext::drawModalMessage(const String& msg)
 
 //------------------------------------------------------------------------
 
-void GLContext::drawImage(Image& image, const Vec4f& pos, const Vec2f& align, bool topToBottom)
+void GLContext::drawImage(const Image& image, const Vec4f& pos, const Vec2f& align, bool topToBottom)
 {
     const Vec2i& imgSize = image.getSize();
     if (imgSize.min() <= 0)
@@ -605,7 +606,7 @@ void GLContext::staticInit(void)
     // Set pixel format.
 
     PIXELFORMATDESCRIPTOR pfd;
-    FW::memset(&pfd, 0, sizeof(pfd));
+    memset(&pfd, 0, sizeof(pfd));
     pfd.nSize = sizeof(pfd);
     pfd.nVersion = 1;
     pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
@@ -726,35 +727,71 @@ void GLContext::checkErrors(void)
 
 bool GLContext::choosePixelFormat(int& formatIdx, HDC hdc, const Config& config)
 {
-    Array<Vec2i> attribs; // WGL_ARB_pixel_format
-    attribs.add(Vec2i(WGL_DRAW_TO_WINDOW_ARB,   1));
-    attribs.add(Vec2i(WGL_ACCELERATION_ARB,     WGL_FULL_ACCELERATION_ARB));
-    attribs.add(Vec2i(WGL_SUPPORT_OPENGL_ARB,   1));
-    attribs.add(Vec2i(WGL_DOUBLE_BUFFER_ARB,    1));
-    attribs.add(Vec2i(WGL_PIXEL_TYPE_ARB,       WGL_TYPE_RGBA_ARB));
+    // Requirements.
 
-    attribs.add(Vec2i(WGL_RED_BITS_ARB,         8));
-    attribs.add(Vec2i(WGL_GREEN_BITS_ARB,       8));
-    attribs.add(Vec2i(WGL_BLUE_BITS_ARB,        8));
-    attribs.add(Vec2i(WGL_ALPHA_BITS_ARB,       0));
-    attribs.add(Vec2i(WGL_ACCUM_BITS_ARB,       0));
-    attribs.add(Vec2i(WGL_DEPTH_BITS_ARB,       24));
-    attribs.add(Vec2i(WGL_STENCIL_BITS_ARB,     8));
-    attribs.add(Vec2i(WGL_AUX_BUFFERS_ARB,      0));
+    Array<Vec2i> reqs; // token, value
+    reqs.add(Vec2i(WGL_DRAW_TO_WINDOW_ARB,  1));
+    reqs.add(Vec2i(WGL_ACCELERATION_ARB,    WGL_FULL_ACCELERATION_ARB));
+    reqs.add(Vec2i(WGL_SUPPORT_OPENGL_ARB,  1));
+    reqs.add(Vec2i(WGL_DOUBLE_BUFFER_ARB,   1));
+    reqs.add(Vec2i(WGL_PIXEL_TYPE_ARB,      WGL_TYPE_RGBA_ARB));
+    reqs.add(Vec2i(WGL_DEPTH_BITS_ARB,      24));
+    reqs.add(Vec2i(WGL_STENCIL_BITS_ARB,    8));
+    reqs.add(Vec2i(WGL_STEREO_ARB,          (config.isStereo) ? 1 : 0));
 
-    if (config.isStereo)
-        attribs.add(Vec2i(WGL_STEREO_ARB, 1));
-    if (config.numSamples)
-        attribs.add(Vec2i(WGL_SAMPLES_ARB, config.numSamples)); // WGL_ARB_multisample
+    if (config.numSamples > 1)
+        reqs.add(Vec2i(WGL_SAMPLES_ARB, config.numSamples)); // WGL_ARB_multisample
 
-    attribs.add(0);
+    reqs.add(0);
 
-    UINT numFormats = 0;
+    // Preferences.
+
+    Array<Vec3i> prefs; // token, value, weight
+    prefs.add(Vec3i(WGL_RED_BITS_ARB,           8,  8));
+    prefs.add(Vec3i(WGL_GREEN_BITS_ARB,         8,  8));
+    prefs.add(Vec3i(WGL_BLUE_BITS_ARB,          8,  8));
+    prefs.add(Vec3i(WGL_ALPHA_BITS_ARB,         8,  0));
+    prefs.add(Vec3i(WGL_ACCUM_BITS_ARB,         0,  16));
+    prefs.add(Vec3i(WGL_AUX_BUFFERS_ARB,        0,  16));
+    prefs.add(Vec3i(WGL_NUMBER_OVERLAYS_ARB,    0,  16));
+    prefs.add(Vec3i(WGL_NUMBER_UNDERLAYS_ARB,   0,  16));
+
+    // Query formats that fulfill the requirements.
+
     if (!GL_FUNC_AVAILABLE(wglChoosePixelFormatARB))
         fail("wglChoosePixelFormatARB() not available!");
-    if (!wglChoosePixelFormatARB(hdc, &attribs[0].x, NULL, 1, &formatIdx, &numFormats))
+
+    UINT numFormats = 0;
+    if (!wglChoosePixelFormatARB(hdc, &reqs[0].x, NULL, 0, NULL, &numFormats))
         failWin32Error("wglChoosePixelFormatARB");
-    return (numFormats != 0);
+    if (numFormats == 0)
+        return false;
+
+    Array<int> formats(NULL, numFormats);
+    if (!wglChoosePixelFormatARB(hdc, &reqs[0].x, NULL, numFormats, formats.getPtr(), &numFormats))
+        failWin32Error("wglChoosePixelFormatARB");
+
+    // Choose format based on the preferences.
+
+    S32 bestCost = FW_S32_MAX;
+    for (int i = 0; i < (int)numFormats; i++)
+    {
+        S32 cost = 0;
+        for (int j = 0; j < prefs.getSize(); j++)
+        {
+            int value = 0;
+            if (!wglGetPixelFormatAttribivARB(hdc, formats[i], 0, 1, &prefs[j].x, &value))
+                failWin32Error("wglGetPixelFormatAttribivARB");
+            cost += abs(value - prefs[j].y) << prefs[j].z;
+        }
+
+        if (cost < bestCost)
+        {
+            formatIdx = formats[i];
+            bestCost = cost;
+        }
+    }
+    return true;
 }
 
 //------------------------------------------------------------------------

@@ -33,10 +33,11 @@ Vec4f Vec4f::fromABGR(U32 abgr)
 
 U32 Vec4f::toABGR(void) const
 {
-    return FW::clamp((int)(x * 255.0f + 0.5f), 0x00, 0xFF) |
-           (FW::clamp((int)(y * 255.0f + 0.5f), 0x00, 0xFF) << 8) |
-           (FW::clamp((int)(z * 255.0f + 0.5f), 0x00, 0xFF) << 16) |
-           (FW::clamp((int)(w * 255.0f + 0.5f), 0x00, 0xFF) << 24);
+    return
+        ((((U32)(((U64)(FW::clamp(x, 0.0f, 1.0f) * exp2(56)) * 255) >> 55) + 1) >> 1) << 0) |
+        ((((U32)(((U64)(FW::clamp(y, 0.0f, 1.0f) * exp2(56)) * 255) >> 55) + 1) >> 1) << 8) |
+        ((((U32)(((U64)(FW::clamp(z, 0.0f, 1.0f) * exp2(56)) * 255) >> 55) + 1) >> 1) << 16) |
+        ((((U32)(((U64)(FW::clamp(w, 0.0f, 1.0f) * exp2(56)) * 255) >> 55) + 1) >> 1) << 24);
 }
 
 //------------------------------------------------------------------------
@@ -56,16 +57,18 @@ Mat4f Mat4f::fitToView(const Vec2f& pos, const Vec2f& size, const Vec2f& viewSiz
     FW_ASSERT(size.x != 0.0f && size.y != 0.0f);
     FW_ASSERT(viewSize.x != 0.0f && viewSize.y != 0.0f);
 
-    return Mat4f()
-        .preXlate(Vec3f(-pos - size * 0.5f, 0.0f))
-        .preScale(Vec3f((viewSize / size).min(), 1.0f))
-        .preScale(Vec3f(Vec2f(2.0f) / viewSize, 1.0f));
+    return
+        Mat4f::scale(Vec3f(Vec2f(2.0f) / viewSize, 1.0f)) *
+        Mat4f::scale(Vec3f((viewSize / size).min(), 1.0f)) *
+        Mat4f::translate(Vec3f(-pos - size * 0.5f, 0.0f));
 }
 
 //------------------------------------------------------------------------
 
 Mat4f Mat4f::perspective(F32 fov, F32 near, F32 far)
 {
+	// Camera points towards -z.  0 < near < far.
+	// Matrix maps z range [-near, -far] to [-1, 1], after homogeneous division.
     F32 f = rcp(tan(fov * FW_PI / 360.0f));
     F32 d = rcp(near - far);
 

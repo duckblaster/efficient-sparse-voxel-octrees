@@ -606,21 +606,21 @@ void CommonControls::render(GLContext* gl)
             Toggle* t = m_toggles[m_activeToggle];
             if (t->visible)
             {
-                gl->drawLabel(t->title,
-                    t->pos + Vec2f(-5.0f, t->size.y * 0.5f), Vec2f(1.0f, 0.5f), 0xFFFFFFFF);
-                repaint = true;
-            }
+            gl->drawLabel(t->title,
+                t->pos + Vec2f(-5.0f, t->size.y * 0.5f), Vec2f(1.0f, 0.5f), 0xFFFFFFFF);
+            repaint = true;
+        }
         }
         if (m_activeSlider != -1)
         {
             Slider* s = m_sliders[m_activeSlider];
             if (s->visible)
             {
-                gl->drawLabel(getSliderLabel(s),
-                    Vec2f(s->pos.x - 4.0f, s->blockPos.y + s->blockSize.y * 0.5f), Vec2f(1.0f, 0.5f), 0xFFFFFFFF);
-                repaint = true;
-            }
+            gl->drawLabel(getSliderLabel(s),
+                Vec2f(s->pos.x - 4.0f, s->blockPos.y + s->blockSize.y * 0.5f), Vec2f(1.0f, 0.5f), 0xFFFFFFFF);
+            repaint = true;
         }
+    }
     }
 
     // Finish up.
@@ -635,12 +635,14 @@ void CommonControls::render(GLContext* gl)
 
 //------------------------------------------------------------------------
 
-void CommonControls::addToggle(bool* boolTarget, S32* enumTarget, S32 enumValue, bool isButton, const String& key, const String& title)
+void CommonControls::addToggle(bool* boolTarget, S32* enumTarget, S32 enumValue, bool isButton, const String& key, const String& title, bool* dirtyNotify)
 {
     Toggle* t           = new Toggle;
     t->boolTarget       = boolTarget;
     t->enumTarget       = enumTarget;
     t->enumValue        = enumValue;
+    t->dirtyNotify      = dirtyNotify;
+
     t->isButton         = isButton;
     t->isSeparator      = (!boolTarget && !enumTarget);
     t->key              = getKey(key);
@@ -660,13 +662,15 @@ void CommonControls::addToggle(bool* boolTarget, S32* enumTarget, S32 enumValue,
 
 //------------------------------------------------------------------------
 
-void CommonControls::addSlider(F32* floatTarget, S32* intTarget, F32 minValue, F32 maxValue, bool isExponential, const String& increaseKey, const String& decreaseKey, const String& format, F32 speed)
+void CommonControls::addSlider(F32* floatTarget, S32* intTarget, F32 minValue, F32 maxValue, bool isExponential, const String& increaseKey, const String& decreaseKey, const String& format, F32 speed, bool* dirtyNotify)
 {
     FW_ASSERT(floatTarget || intTarget);
 
     Slider* s           = new Slider;
     s->floatTarget      = floatTarget;
     s->intTarget        = intTarget;
+    s->dirtyNotify      = dirtyNotify;
+
     s->slack            = 0.0f;
     s->minValue         = minValue;
     s->maxValue         = maxValue;
@@ -738,7 +742,7 @@ void CommonControls::layout(const Vec2f& viewSize, F32 fontHeight)
         F32 sliderY = 0.0f;
         for (int i = endSlider - 1; i >= startSlider; i--)
         {
-            Slider* s = m_sliders[i];
+            Slider* s    = m_sliders[i];
             if (!s->visible)
                 continue;
 
@@ -775,8 +779,8 @@ void CommonControls::layout(const Vec2f& viewSize, F32 fontHeight)
 
             numInStrip++;
             if (numInCol + numInStrip > maxInCol)
-            {
-                numInCol = 0;
+        {
+            numInCol = 0;
                 if (numInStrip > maxInCol)
                     break;
             }
@@ -860,10 +864,19 @@ U32 CommonControls::fadeABGR(U32 abgr, F32 fade)
 void CommonControls::selectToggle(Toggle* t)
 {
     FW_ASSERT(t);
+
     if (t->boolTarget)
         *t->boolTarget = (!*t->boolTarget);
+
     if (t->enumTarget)
+    {
+        if (*t->enumTarget == t->enumValue)
+            return;
         *t->enumTarget = t->enumValue;
+}
+
+    if (t->dirtyNotify)
+        *t->dirtyNotify = true;
 }
 
 //------------------------------------------------------------------------
@@ -906,16 +919,23 @@ void CommonControls::setSliderValue(Slider* s, F32 v)
         exp(lerp(log(s->minValue), log(s->maxValue), clamped)) :
         lerp(s->minValue, s->maxValue, clamped);
 
+    bool dirty;
     if (s->floatTarget)
     {
+        dirty = (*s->floatTarget != raw);
         *s->floatTarget = raw;
         s->slack = 0.0f;
     }
     else
     {
-        *s->intTarget = (S32)(raw + ((raw >= 0.0f) ? 0.5f : -0.5f));
-        s->slack = raw - (F32)*s->intTarget;
+        S32 rounded = (S32)(raw + ((raw >= 0.0f) ? 0.5f : -0.5f));
+        dirty = (*s->intTarget != rounded);
+        *s->intTarget = rounded;
+        s->slack = raw - (F32)rounded;
     }
+
+    if (dirty && s->dirtyNotify)
+        *s->dirtyNotify = true;
 }
 
 //------------------------------------------------------------------------

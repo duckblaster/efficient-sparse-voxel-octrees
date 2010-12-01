@@ -45,7 +45,7 @@ public:
 
         Feature_None                = 0,
         Feature_All                 = (1 << 8) - 1,
-        Feature_Default             = Feature_All
+        Feature_Default             = Feature_All & ~Feature_StereoControls
     };
 
     //------------------------------------------------------------------------
@@ -81,7 +81,7 @@ public:
     Mat4f               getCameraToClip     (void) const        { return Mat4f::perspective(m_fov, m_near, m_far); }
     Mat4f               getWorldToClip      (void) const        { return getCameraToClip() * getWorldToCamera(); }
     Mat4f               getCameraToLeftEye  (void) const        { Mat4f m; m.m02 = m_stereoConvergence; m.m03 = m_stereoSeparation; return m; }
-    Mat4f               getCameraToRightEye (void) const        { return getCameraToLeftEye().inv(); }
+    Mat4f               getCameraToRightEye (void) const        { return getCameraToLeftEye().inverted(); }
 
     void                initDefaults        (void);
     void                initForMesh         (const MeshBase* mesh);

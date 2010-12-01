@@ -207,9 +207,9 @@ void DisplacedTriangle::set(
     bToT.setCol(0, Vec3f(tu, 0.0f));
     bToT.setCol(1, Vec3f(tv, 0.0f));
     bToT.setCol(2, Vec3f(t, 1.0f));
-    bToT = bToT.preScale(Vec2f((F32)map->getSize().x, (F32)map->getSize().y));
-    bToT = bToT.preXlate(Vec2f(-0.5f));
-    Mat3f tToB = bToT.inv();
+    bToT = Mat3f::scale(Vec2f((F32)map->getSize().x, (F32)map->getSize().y)) * bToT;
+    bToT = Mat3f::translate(Vec2f(-0.5f)) * bToT;
+    Mat3f tToB = bToT.inverted();
     m_b = Vec3f(tToB.getCol(2)).getXY();
     m_bs = Vec3f(tToB.getCol(0)).getXY();
     m_bt = Vec3f(tToB.getCol(1)).getXY();
@@ -239,9 +239,9 @@ void DisplacedTriangle::set(
 
     // Detect constant normal.
 
-    Vec3f n0 = n.normalize();
-    Vec3f n1 = (n + nu).normalize();
-    Vec3f n2 = (n + nv).normalize();
+    Vec3f n0 = n.normalized();
+    Vec3f n1 = (n + nu).normalized();
+    Vec3f n2 = (n + nv).normalized();
     m_constantNormal = (min(n0.dot(n1), n0.dot(n2)) >= 0.999f);
 
     if (m_constantNormal)
@@ -413,7 +413,7 @@ void DisplacedTriangle::getTexAndNormal(Vec2f& texLo, Vec2f& texHi, Normal& norm
     Vec2f coef(1.0f / (F32)size.x, 1.0f / (F32)size.y);
     texLo = (texLo + 0.5f) * coef;
     texHi = (texHi + 0.5f) * coef;
-    normal.avg = normal.avg.normalize();
+    normal.avg = normal.avg.normalized();
 }
 
 //------------------------------------------------------------------------
@@ -892,12 +892,12 @@ void DisplacedTriangle::getTexelQuadrangle(Quadrangle& res, int x, int y) const
     {
         Vec2f t((F32)x, (F32)y);
         Vec3f n = m_n + m_ns * t.x + m_nt * t.y;
-        Vec3f p = n.normalize(m_map->getTexel(x, y).height);
+        Vec3f p = n.normalized(m_map->getTexel(x, y).height);
 
         res.p0 = p + m_p + m_ps * t.x + m_pt * t.y;
-        res.d1 = (n + m_ns).normalize(m_map->getTexel(x + 1, y).height) + m_ps - p;
-        res.d2 = (n + m_nt).normalize(m_map->getTexel(x, y + 1).height) + m_pt - p;
-        res.d3 = (n + m_ns + m_nt).normalize(m_map->getTexel(x + 1, y + 1).height) + m_ps + m_pt - p;
+        res.d1 = (n + m_ns).normalized(m_map->getTexel(x + 1, y).height) + m_ps - p;
+        res.d2 = (n + m_nt).normalized(m_map->getTexel(x, y + 1).height) + m_pt - p;
+        res.d3 = (n + m_ns + m_nt).normalized(m_map->getTexel(x + 1, y + 1).height) + m_ps + m_pt - p;
     }
 }
 
@@ -936,7 +936,7 @@ void DisplacedTriangle::updateNormal(Normal& res, const Vec3f& t, const Vec2f& g
     // Update result.
 
     F32 coef = 1.0f / ra.length();
-    res.avg += r.normalize(weight);
+    res.avg += r.normalized(weight);
     res.lo = vecMin(res.lo, (ra - rd) * coef);
     res.hi = vecMin(res.hi, (ra + rd) * coef);
 }

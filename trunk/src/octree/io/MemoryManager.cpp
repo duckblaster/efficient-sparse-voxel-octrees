@@ -63,7 +63,7 @@ MemoryManager::Relocation& MemoryManager::Relocation::operator=(const Relocation
 
 MemoryManager::MemoryManager(Mode mode, int align)
 :   m_mode          (mode),
-    m_buffer        (Buffer::Hint_None, align)
+    m_buffer        (NULL, 0, Buffer::Hint_None, align)
 {
     // Determine page size.
 
@@ -350,7 +350,7 @@ void MemoryManager::allocMaximalCudaBuffer(void)
     CudaModule::staticInit();
     Array<Block> blocks;
     {
-        U32 free = 0, total = 0;
+        CUsize_t free = 0, total = 0;
         cuMemGetInfo(&free, &total);
 
         U64 size = (U64)max((S64)free - CudaMemReserve, (S64)0);
@@ -373,7 +373,7 @@ void MemoryManager::allocMaximalCudaBuffer(void)
         U64 totalSize = 0;
         for (;;)
         {
-            U32 free = 0, total = 0;
+            CUsize_t free = 0, total = 0;
             cuMemGetInfo(&free, &total);
 
             U64 size = 1;

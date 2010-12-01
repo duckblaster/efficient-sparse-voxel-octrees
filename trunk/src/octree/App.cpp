@@ -184,7 +184,7 @@ App::App(void)
     m_managementControlsVisible     (false)
 {
     m_commonCtrl.showFPS(true);
-    m_commonCtrl.setStateFilePrefix("state_");
+    m_commonCtrl.setStateFilePrefix("state_octree_");
     m_commonCtrl.addStateObject(this);
 
     m_cameraCtrl.setKeepAligned(true);

@@ -26,7 +26,7 @@ namespace FW
 #define FW_KEY_NONE                 ""
 #define FW_KEY_MOUSE_LEFT           "!MouseLeft"            // Left (primary) mouse button.
 #define FW_KEY_MOUSE_RIGHT          "!MouseRight"           // Right (secondary) mouse button.
-#define FW_KEY_MOUSE_MIDDLE         "!MouseMiddle"          // Middle (ternarny) mouse button.
+#define FW_KEY_MOUSE_MIDDLE         "!MouseMiddle"          // Middle (ternary) mouse button.
 #define FW_KEY_WHEEL_UP             "!WheelUp"              // Mouse wheel up.
 #define FW_KEY_WHEEL_DOWN           "!WheelDown"            // Mouse wheel down.
 #define FW_KEY_LEFT_SOFTKEY         "LeftSoftKey"           // Left softkey.

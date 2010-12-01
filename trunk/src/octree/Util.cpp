@@ -349,7 +349,7 @@ void FW::encodeDXTNormals(U64& blockA, U64& blockB, const Vec3f* normals, const 
 
     Vec3f uRef[4];
     for (int i = 0; i < 4; i++)
-        uRef[i] = (base + u * s_dxtNormalCoefs[i]).normalize();
+        uRef[i] = (base + u * s_dxtNormalCoefs[i]).normalized();
 
     Vec2i vIdx;
     F32 vDot = FW_F32_MAX;
@@ -384,7 +384,7 @@ void FW::encodeDXTNormals(U64& blockA, U64& blockB, const Vec3f* normals, const 
     Vec3f uvRef[16];
     for (int i = 0; i < 4; i++)
         for (int j = 0; j < 4; j++)
-            uvRef[i + j * 4] = (base + u * s_dxtNormalCoefs[i] + v * s_dxtNormalCoefs[j]).normalize();
+            uvRef[i + j * 4] = (base + u * s_dxtNormalCoefs[i] + v * s_dxtNormalCoefs[j]).normalized();
 
     U32 bitsU = 0;
     U32 bitsV = 0;

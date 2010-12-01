@@ -47,7 +47,7 @@ public:
     void                setWarmupLaunches       (S32 value)                     { m_warmupLaunches = value; }
     void                setMeasureFrames        (S32 value)                     { m_measureFrames = value; }
 
-    void                loadOctree              (const String& fileName, int numLevels = OctreeFile::UnitScale) { m_ctx.load(fileName, numLevels); }
+    void                loadOctree              (const String& fileName, int numLevels = OctreeFile::UnitScale) { m_ctx.setFile(fileName); m_ctx.load(numLevels); }
     void                setCameras              (const Array<String>& value)    { m_cameras = value; }
 
     void                clearResults            (void)                          { m_results.clear(); }

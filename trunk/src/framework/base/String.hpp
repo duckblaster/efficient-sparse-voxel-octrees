@@ -48,6 +48,12 @@ public:
     String          substring   (int start, int end) const;
     String          substring   (int start) const               { return substring(start, getLength()); }
 
+	String			trimStart	(void) const;
+	String			trimEnd		(void) const;
+	String			trim		(void) const;
+
+	void			split		(char chr, Array<String>& pieces, bool includeEmpty = false) const;
+
     String&         clear       (void)                          { m_chars.clear(); }
     String&         append      (char chr);
     String&         append      (const char* chars);
@@ -97,6 +103,8 @@ private:
 };
 
 //------------------------------------------------------------------------
+
+String  getDateString   (void);
 
 bool    parseSpace      (const char*& ptr);
 bool    parseChar       (const char*& ptr, char chr);

@@ -54,15 +54,14 @@ BuilderMesh::BuilderMesh(const MeshBase* foreignMesh)
 
     Vec3f lo, hi;
     m_mesh->getBBox(lo, hi);
-
-    m_octreeToObject = Mat4f()
-        .preXlate(Vec3f(-0.5f))
-        .preScale(Vec3f((hi - lo).max() + maxDisp * 2.0f))
-        .preXlate((lo + hi) * 0.5f);
+    m_octreeToObject =
+        Mat4f::translate((lo + hi) * 0.5f) *
+        Mat4f::scale(Vec3f((hi - lo).max() + maxDisp * 2.0f)) *
+        Mat4f::translate(Vec3f(-0.5f));
 
     // This maps everything to range 0 .. 2^23 (= OctreeFile::UnitScale)
 
-    m_xform = m_octreeToObject.inv().preScale(Vec3f(exp2(OctreeFile::UnitScale)));
+    m_xform = Mat4f::scale(Vec3f(exp2(OctreeFile::UnitScale))) * m_octreeToObject.inverted();
 
     // Calculate number of bits per triangle index.
 
@@ -380,7 +379,7 @@ void BuilderMesh::expandBatch(Batch* batch)
         {
             v[k] = m_mesh->vertex(inds[k]);
             v[k].p = m_xform * v[k].p;
-            v[k].n = v[k].n.normalize();
+            v[k].n = v[k].n.normalized();
 
             for (int l = 0; l < 3; l++)
             {

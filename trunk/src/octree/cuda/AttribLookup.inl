@@ -310,7 +310,7 @@ __device__ void lookupVoxelColorNormal(float4& colorRes, float3& normalRes, cons
 {
     // Find DXTNode.
 
-    S32* pageHeader  = (S32*)((S32)castRes.node & -OctreeRuntime::PageBytes);
+    S32* pageHeader  = (S32*)((CUdeviceptr)castRes.node & -(CUdeviceptr)OctreeRuntime::PageBytes);
     S32* blockInfo   = pageHeader + *pageHeader;
     S32* blockStart  = blockInfo + blockInfo[OctreeRuntime::BlockInfo_BlockPtr];
     S32* attachInfos = blockInfo + OctreeRuntime::BlockInfo_End;
@@ -342,7 +342,7 @@ __device__ void lookupVoxelAO(float& res, const CastResult& castRes, const CastS
 {
     // Find DXTNode.
 
-    S32* pageHeader  = (S32*)((S32)castRes.node & -OctreeRuntime::PageBytes);
+    S32* pageHeader  = (S32*)((CUdeviceptr)castRes.node & -(CUdeviceptr)OctreeRuntime::PageBytes);
     S32* blockInfo   = pageHeader + *pageHeader;
     S32* blockStart  = blockInfo + blockInfo[OctreeRuntime::BlockInfo_BlockPtr];
     S32* attachInfos = blockInfo + OctreeRuntime::BlockInfo_End;

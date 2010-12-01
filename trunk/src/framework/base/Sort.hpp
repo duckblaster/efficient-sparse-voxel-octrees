@@ -27,6 +27,7 @@ typedef void    (*SortSwapFunc)     (void* data, int idxA, int idxB);
 //------------------------------------------------------------------------
 
 void sort       (int start, int end, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc); // [start, end[
+void sortMulticore  (int start, int end, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc); // [start, end[
 
 int  compareS32 (void* data, int idxA, int idxB);
 void swapS32    (void* data, int idxA, int idxB);

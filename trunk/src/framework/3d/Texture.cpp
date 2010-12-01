@@ -55,19 +55,6 @@ Texture Texture::import(const String& fileName)
 
 //------------------------------------------------------------------------
 
-GLuint Texture::getGLTexture(ImageFormat::ID desiredFormat, bool generateMipmaps) const
-{
-    FW_ASSERT(desiredFormat >= 0 && (desiredFormat < ImageFormat::ID_Generic || desiredFormat == ImageFormat::ID_Max));
-    if (!m_data)
-        return 0;
-
-    if (m_data->glTexture == 0 && m_data->image)
-        m_data->glTexture = m_data->image->createGLTexture(desiredFormat, generateMipmaps);
-    return m_data->glTexture;
-}
-
-//------------------------------------------------------------------------
-
 void Texture::set(const Texture& other)
 {
     Data* old = m_data;
@@ -76,6 +63,89 @@ void Texture::set(const Texture& other)
         referData(m_data);
     if (old)
         unreferData(old);
+}
+
+//------------------------------------------------------------------------
+
+GLuint Texture::getGLTexture(ImageFormat::ID desiredFormat, bool generateMipmaps) const
+{
+    if (!m_data)
+        return 0;
+    if (m_data->glTexture == 0 && m_data->image)
+        m_data->glTexture = m_data->image->createGLTexture(desiredFormat, generateMipmaps);
+    return m_data->glTexture;
+}
+
+//------------------------------------------------------------------------
+
+CUarray Texture::getCudaArray(const ImageFormat::ID desiredFormat) const
+{
+    if (!m_data)
+        return NULL;
+    if (!m_data->cudaArray && m_data->image)
+        m_data->cudaArray = m_data->image->createCudaArray(desiredFormat);
+    return m_data->cudaArray;
+}
+
+//------------------------------------------------------------------------
+
+Texture Texture::getMipLevel(int level, bool generateByGL) const
+{
+    if (!exists() || level <= 0)
+        return *this;
+
+    // No mipmaps => generate.
+
+    if (!m_data->nextMip)
+    {
+        // Generate by OpenGL.
+
+        if (generateByGL)
+        {
+            GLint oldTex = 0;
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &oldTex);
+            glBindTexture(GL_TEXTURE_2D, getGLTexture(ImageFormat::ABGR_8888));
+
+            const Texture* prevTex = this;
+            for (int level = 1;; level++)
+            {
+                GLint w, h;
+                glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_WIDTH, &w);
+                glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_HEIGHT, &h);
+                if (w <= 0 || h <= 0)
+                    break;
+
+                Image* image = new Image(Vec2i(w, h), ImageFormat::ABGR_8888);
+                glGetTexImage(GL_TEXTURE_2D, level, GL_RGBA, GL_UNSIGNED_BYTE, image->getMutablePtr());
+                prevTex->m_data->nextMip = new Texture(image);
+                prevTex = prevTex->m_data->nextMip;
+            }
+
+            glBindTexture(GL_TEXTURE_2D, oldTex);
+            GLContext::checkErrors();
+}
+
+        // Generate by Image::downscale2x().
+
+        else
+        {
+            const Texture* prevTex = this;
+            Image* currImage = getImage()->downscale2x();
+            while (currImage)
+            {
+                prevTex->m_data->nextMip = new Texture(currImage);
+                prevTex = prevTex->m_data->nextMip;
+                currImage = currImage->downscale2x();
+            }
+        }
+    }
+
+    // Find the requested level.
+
+    const Texture* currTex = this;
+    for (int i = 0; i < level && currTex->m_data->nextMip; i++)
+        currTex = currTex->m_data->nextMip;
+    return *currTex;
 }
 
 //------------------------------------------------------------------------
@@ -100,6 +170,8 @@ Texture::Data* Texture::createData(const String& id)
     data->isInHash  = false;
     data->image     = NULL;
     data->glTexture = 0;
+    data->cudaArray = NULL;
+    data->nextMip   = NULL;
 
     // Update hash.
 
@@ -148,10 +220,14 @@ void Texture::unreferData(Data* data)
 
     // Delete data.
 
-    if (data->image)
-        delete data->image;
     if (data->glTexture != 0)
         glDeleteTextures(1, &data->glTexture);
+
+    if (data->cudaArray)
+        CudaModule::checkError("cuArrayDestroy", cuArrayDestroy(data->cudaArray));
+
+    delete data->image;
+    delete data->nextMip;
     delete data;
 }
 

@@ -16,6 +16,8 @@
  
 #pragma once
 
+#include <string.h>
+
 namespace FW
 {
 //------------------------------------------------------------------------
@@ -49,7 +51,7 @@ namespace FW
 #endif
 
 #if FW_CUDA
-#   define FW_CUDA_FUNC     __device__ inline
+#   define FW_CUDA_FUNC     __device__ __inline__
 #   define FW_CUDA_CONST    __constant__
 #else
 #   define FW_CUDA_FUNC     inline
@@ -112,11 +114,6 @@ class String;
 void*           malloc          (size_t size);
 void            free            (void* ptr);
 void*           realloc         (void* ptr, size_t size);
-
-void*           memset          (void* dst, int value, size_t size);
-void*           memcpy          (void* dst, const void* src, size_t size);
-void*           memmove         (void* dst, const void* src, size_t size);
-int             memcmp          (const void* srcA, const void* srcB, size_t size);
 
 void            printf          (const char* fmt, ...);
 String          sprintf         (const char* fmt, ...);

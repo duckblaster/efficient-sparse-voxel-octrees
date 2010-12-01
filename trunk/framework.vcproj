@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="Windows-1252"?>
 <VisualStudioProject
 	ProjectType="Visual C++"
-	Version="8.00"
+	Version="9.00"
 	Name="framework"
 	ProjectGUID="{8E0B71BD-6F14-4F0C-AC34-45985043856F}"
 	RootNamespace="framework"
 	Keyword="Win32Proj"
+	TargetFrameworkVersion="131072"
 	>
 	<Platforms>
 		<Platform
@@ -185,6 +186,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
+				Optimization="3"
 				FavorSizeOrSpeed="1"
 				WholeProgramOptimization="false"
 				AdditionalIncludeDirectories="src/framework,$(CUDA_INC_PATH),$(IntDir)"
@@ -255,6 +257,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
+				Optimization="3"
 				FavorSizeOrSpeed="1"
 				WholeProgramOptimization="false"
 				AdditionalIncludeDirectories="src/framework,$(CUDA_INC_PATH),$(IntDir)"
@@ -363,6 +366,22 @@
 			</File>
 			<File
 				RelativePath=".\src\framework\base\Math.hpp"
+				>
+			</File>
+			<File
+				RelativePath=".\src\framework\base\MulticoreLauncher.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\src\framework\base\MulticoreLauncher.hpp"
+				>
+			</File>
+			<File
+				RelativePath=".\src\framework\base\Random.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\src\framework\base\Random.hpp"
 				>
 			</File>
 			<File

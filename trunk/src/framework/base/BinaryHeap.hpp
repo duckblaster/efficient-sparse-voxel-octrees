@@ -28,27 +28,30 @@ private:
     {
         T           value;
         S32         slot;       // -1 if the item does not exist
+        S32         nextInFreelist; // -1 if last, -2 if not in freelist. Freelist may contain items that are not actually free.
     };
 
 public:
-                    BinaryHeap  (void)                          : m_hasBeenBuilt(false) {}
-                    BinaryHeap  (const BinaryHeap<T>& other)    : m_hasBeenBuilt(false) { set(other); }
+                    BinaryHeap  (void)                          : m_hasBeenBuilt(false), m_freelist(-1) {}
+                    BinaryHeap  (const BinaryHeap<T>& other)    { set(other); }
                     ~BinaryHeap (void)                          {}
 
-    int             numIndices  (void) const                    { return m_items.getSize(); }
-    int             numItems    (void) const                    { return m_slots.getSize(); }
+    int             numIndices  (void) const                    { return m_items.getSize(); } // Maximum idx ever used + 1.
+    int             numItems    (void) const                    { return m_slots.getSize(); } // Actual size.
     bool            isEmpty     (void) const                    { return (numItems() == 0); }
     bool            contains    (int idx) const                 { return (idx >= 0 && idx < m_items.getSize() && m_items[idx].slot != -1); }
     const T&        get         (int idx) const                 { FW_ASSERT(contains(idx)); return m_items[idx].value; }
 
-    void            clear       (void)                          { m_items.clear(); m_slots.clear(); m_hasBeenBuilt = false; }
-    void            reset       (void)                          { m_items.reset(); m_slots.reset(); m_hasBeenBuilt = false; }
-    void            set         (const BinaryHeap<T>& other)    { m_items = other.m_items; m_slots = other.m_slots; m_hasBeenBuilt = other.m_hasBeenBuilt; }
-    void            add         (int idx, const T& value);
-    T               remove      (int idx);
+    void            clear       (void)                          { m_items.clear(); m_slots.clear(); m_hasBeenBuilt = false; m_freelist = -1; }
+    void            reset       (void)                          { m_items.reset(); m_slots.reset(); m_hasBeenBuilt = false; m_freelist = -1; }
+    void            set         (const BinaryHeap<T>& other);
+    void            add         (int idx, const T& value);      // Adds or replaces an item with the specified index.
+    int             add         (const T& value);               // Allocates a previously unused index.
+    T               remove      (int idx);                      // Removes an item with the specified index.
 
-    int             getMinIndex (void);
-    const T&        getMin      (void)                          { return get(getMinIndex()); }
+    int             getMinIndex (void);                         // Returns the index of the smallest item.
+    const T&        getMin      (void)                          { return get(getMinIndex()); } // Returns the smallest item itself.
+    int             removeMinIndex(void)                        { int idx = getMinIndex(); remove(idx); return idx; }
     T               removeMin   (void)                          { return remove(getMinIndex()); }
 
     const T&        operator[]  (int idx) const                 { return get(idx); }
@@ -62,7 +65,18 @@ private:
     Array<Item>     m_items;
     Array<S32>      m_slots;
     bool            m_hasBeenBuilt;
+    S32             m_freelist;
 };
+
+//------------------------------------------------------------------------
+
+template <class T> void BinaryHeap<T>::set(const BinaryHeap<T>& other)
+{
+    m_items         = other.m_items;
+    m_slots         = other.m_slots;
+    m_hasBeenBuilt  = other.m_hasBeenBuilt;
+    m_freelist      = other.m_freelist;
+}
 
 //------------------------------------------------------------------------
 
@@ -73,7 +87,12 @@ template <class T> void BinaryHeap<T>::add(int idx, const T& value)
     // Ensure that the index exists.
 
     while (idx >= m_items.getSize())
-        m_items.add().slot = -1;
+    {
+        Item& item = m_items.add();
+        item.slot = -1;
+        item.nextInFreelist = m_freelist;
+        m_freelist = m_items.getSize() - 1;
+    }
 
     // Replace an existing item or add a new item in the last slot.
 
@@ -95,6 +114,32 @@ template <class T> void BinaryHeap<T>::add(int idx, const T& value)
 
 //------------------------------------------------------------------------
 
+template <class T> int BinaryHeap<T>::add(const T& value)
+{
+    // Allocate an index.
+
+    int idx;
+    do
+    {
+        idx = m_freelist;
+        if (idx == -1)
+        {
+            idx = m_items.getSize();
+            break;
+        }
+        m_freelist = m_items[idx].nextInFreelist;
+        m_items[idx].nextInFreelist = -2;
+    }
+    while (m_items[idx].slot != -1);
+
+    // Add the item.
+
+    add(idx, value);
+    return idx;
+}
+
+//------------------------------------------------------------------------
+
 template <class T> T BinaryHeap<T>::remove(int idx)
 {
     // Not in the heap => ignore.
@@ -111,6 +156,12 @@ template <class T> T BinaryHeap<T>::remove(int idx)
 
     Item item = m_items[idx];
     m_items[idx].slot = -1;
+
+    if (item.nextInFreelist == -2)
+    {
+        m_items[idx].nextInFreelist = m_freelist;
+        m_freelist = idx;
+    }
 
     // Move the last item into the slot.
 

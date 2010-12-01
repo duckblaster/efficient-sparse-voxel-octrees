@@ -188,7 +188,8 @@ BufferedOutputStream::BufferedOutputStream(OutputStream& stream, int bufferSize,
     m_buffer        (NULL, bufferSize),
     m_numValid      (0),
     m_lineStart     (0),
-    m_currOfs       (0)
+    m_currOfs       (0),
+    m_numFlushed    (0)
 {
     FW_ASSERT(bufferSize > 0);
 }
@@ -252,6 +253,7 @@ void BufferedOutputStream::writefv(const char* fmt, va_list args)
         char* tmp = new char[size + 1];
         vsprintf_s(tmp, size + 1, fmt, args);
         m_stream.write(tmp, size);
+        m_numFlushed += size;
         delete[] tmp;
     }
 }
@@ -332,6 +334,8 @@ void BufferedOutputStream::flushInternal(void)
         return;
 
     m_stream.write(m_buffer.getPtr(), size);
+    m_numFlushed += size;
+
     m_numValid -= size;
     memmove(m_buffer.getPtr(), m_buffer.getPtr(size), m_numValid);
     m_lineStart = max(m_lineStart - size, 0);

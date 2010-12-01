@@ -26,7 +26,7 @@ using namespace FW;
 // Global variables.
 //------------------------------------------------------------------------
 
-__constant__ U32    c_input[(sizeof(RenderInput) + sizeof(U32) - 1) / sizeof(U32)];
+__constant__ int4   c_input[(sizeof(RenderInput) + sizeof(int4) - 1) / sizeof(int4)];
 __constant__ int4   c_blurLUT[BLUR_LUT_SIZE];
 __device__ S32      g_warpCounter;
 
@@ -415,7 +415,7 @@ __device__ void fetchWorkNext(int& warp, int& batchCounter, int* warpCounter, in
 
 #ifdef KERNEL_RENDER
 
-__global__ void kernel(void)
+extern "C" __global__ void kernel(void)
 {
     const RenderInput& input = getInput();
     __shared__ Aux auxbuf[RCK_TRACE_BLOCK_WIDTH * RCK_TRACE_BLOCK_HEIGHT];
@@ -539,7 +539,7 @@ __global__ void kernel(void)
 
 #ifdef KERNEL_RAYCAST_PERF
 
-__global__ void kernel(void)
+extern "C" __global__ void kernel(void)
 {
     const RenderInput& input = getInput();
     __shared__ Aux auxbuf[RCK_TRACE_BLOCK_WIDTH * RCK_TRACE_BLOCK_HEIGHT];
@@ -612,7 +612,7 @@ __global__ void kernel(void)
 // Post-process filter kernel.
 //------------------------------------------------------------------------
 
-__global__ void blurKernel(void)
+extern "C" __global__ void blurKernel(void)
 {
     const RenderInput& input = getInput();
     int px = blockIdx.x * blockDim.x + threadIdx.x;

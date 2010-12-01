@@ -49,15 +49,25 @@ class CastStack
 public:
     __device__      CastStack   (void)                          {}
 
+#if FW_64
+    __device__ S32* read        (int idx, F32& tmax) const      { tmax = tmaxStack[idx]; return nodeStack[idx]; }
+    __device__ void write       (int idx, S32* node, F32 tmax)  { nodeStack[idx] = node; tmaxStack[idx] = tmax; }
+#else
     __device__ S32* read        (int idx, F32& tmax) const      { U64 e = stack[idx]; tmax = __int_as_float((U32)(e >> 32)); return (S32*)(U32)e; }
     __device__ void write       (int idx, S32* node, F32 tmax)  { stack[idx] = (U32)node | ((U64)__float_as_int(tmax) << 32); }
+#endif
 
 private:
                     CastStack   (CastStack& other); // forbidden
     CastStack&      operator=   (CastStack& other); // forbidden
 
 private:
+#if FW_64
+    S32*            nodeStack[CAST_STACK_DEPTH + 1];
+    F32             tmaxStack[CAST_STACK_DEPTH + 1];
+#else
     U64             stack[CAST_STACK_DEPTH + 1];
+#endif
 };
 
 //------------------------------------------------------------------------

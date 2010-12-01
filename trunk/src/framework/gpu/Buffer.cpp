@@ -40,9 +40,14 @@ void Buffer::wrapGL(GLuint glBuffer)
     FW_ASSERT(glBuffer != 0);
 
     GLint size;
+    {
+        GLint oldBuffer;
+        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldBuffer);
     glBindBuffer(GL_ARRAY_BUFFER, glBuffer);
     glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &size);
+        glBindBuffer(GL_ARRAY_BUFFER, oldBuffer);
     GLContext::checkErrors();
+    }
 
     m_glBuffer = glBuffer;
     wrap(GL, size);
@@ -56,21 +61,6 @@ void Buffer::wrapCuda(CUdeviceptr cudaPtr, S64 size)
 
     m_cudaPtr = cudaPtr;
     wrap(Cuda, size);
-}
-
-//------------------------------------------------------------------------
-
-void Buffer::setHintsAndAlign(U32 hints, int align)
-{
-    FW_ASSERT((hints & ~Hint_All) == 0);
-    FW_ASSERT(align > 0);
-
-    if (m_original == CPU)
-        hints &= ~Hint_PageLock;
-    if (m_original == Cuda || align != 1)
-        hints &= ~Hint_CudaGL;
-
-    realloc(m_size, hints, align);
 }
 
 //------------------------------------------------------------------------
@@ -121,9 +111,14 @@ void Buffer::setRange(S64 dstOfs, const void* src, S64 size, bool async, CUstrea
     switch (m_owner)
     {
     case GL:
+        {
+            GLint oldBuffer;
+            glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldBuffer);
         glBindBuffer(GL_ARRAY_BUFFER, getMutableGLBuffer());
         glBufferSubData(GL_ARRAY_BUFFER, (GLintptr)dstOfs, (GLsizeiptr)size, src);
+            glBindBuffer(GL_ARRAY_BUFFER, oldBuffer);
         GLContext::checkErrors();
+        }
         break;
 
     case Cuda:
@@ -134,6 +129,43 @@ void Buffer::setRange(S64 dstOfs, const void* src, S64 size, bool async, CUstrea
         memcpy(getMutablePtr(dstOfs), src, (size_t)size);
         break;
     }
+}
+
+//------------------------------------------------------------------------
+
+void Buffer::setRange(S64 dstOfs, Buffer& src, S64 srcOfs, S64 size, bool async, CUstream cudaStream)
+{
+    FW_ASSERT(size >= 0);
+    FW_ASSERT(dstOfs >= 0 && dstOfs <= m_size - size);
+    FW_ASSERT(srcOfs >= 0 && srcOfs <= src.m_size - size);
+
+    if (!size)
+        return;
+
+    if ((src.m_exists & Cuda) != 0 && (src.m_dirty & Cuda) == 0 && (m_owner == Cuda || m_owner == Module_None))
+        memcpyDtoD(getMutableCudaPtr(dstOfs), src.getCudaPtr(srcOfs), (U32)size);
+    else if ((src.m_exists & CPU) != 0 && (src.m_dirty & CPU) == 0)
+        setRange(dstOfs, src.getPtr(srcOfs), size, async, cudaStream);
+    else
+        src.getRange(getMutablePtr(dstOfs), srcOfs, size, async, cudaStream);
+}
+
+//------------------------------------------------------------------------
+
+void Buffer::clearRange(S64 dstOfs, int value, S64 size, bool async, CUstream cudaStream)
+{
+    FW_ASSERT(size >= 0);
+    FW_ASSERT(dstOfs >= 0 && dstOfs <= m_size - size);
+    FW_UNREF(async); // unsupported
+    FW_UNREF(cudaStream); // unsupported
+
+    if (!size)
+        return;
+
+    if (m_owner == Cuda)
+        CudaModule::checkError("cuMemsetD8", cuMemsetD8(getMutableCudaPtr(dstOfs), (U8)value, (U32)size));
+    else
+        memset(getMutablePtr(dstOfs), value, (size_t)size);
 }
 
 //------------------------------------------------------------------------
@@ -150,9 +182,14 @@ void Buffer::getRange(void* dst, S64 srcOfs, S64 size, bool async, CUstream cuda
     switch (m_owner)
     {
     case GL:
+        {
+            GLint oldBuffer;
+            glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldBuffer);
         glBindBuffer(GL_ARRAY_BUFFER, m_glBuffer);
         glGetBufferSubData(GL_ARRAY_BUFFER, (GLintptr)srcOfs, (GLsizeiptr)size, dst);
+            glBindBuffer(GL_ARRAY_BUFFER, oldBuffer);
         GLContext::checkErrors();
+        }
         break;
 
     case Cuda:
@@ -163,25 +200,6 @@ void Buffer::getRange(void* dst, S64 srcOfs, S64 size, bool async, CUstream cuda
         memcpy(dst, m_cpuPtr + srcOfs, (size_t)size);
         break;
     }
-}
-
-//------------------------------------------------------------------------
-
-void Buffer::setRange(S64 dstOfs, Buffer& src, S64 srcOfs, S64 size, bool async, CUstream cudaStream)
-{
-    FW_ASSERT(size >= 0);
-    FW_ASSERT(dstOfs >= 0 && dstOfs <= m_size - size);
-    FW_ASSERT(srcOfs >= 0 && srcOfs <= src.m_size - size);
-
-    if (!size)
-        return;
-
-    if (m_owner == Cuda && (src.m_exists & Cuda) != 0 && (src.m_dirty & Cuda) == 0)
-        memcpyDtoD(getMutableCudaPtr(dstOfs), src.getCudaPtr(srcOfs), (U32)size);
-    else if ((src.m_exists & CPU) != 0 && (src.m_dirty & CPU) == 0)
-        setRange(dstOfs, src.getPtr(srcOfs), size, async, cudaStream);
-    else
-        src.getRange(getMutablePtr(dstOfs), srcOfs, size, async, cudaStream);
 }
 
 //------------------------------------------------------------------------
@@ -230,6 +248,7 @@ void Buffer::setOwner(Module module, bool modify, bool async, CUstream cudaStrea
         {
             cpuAlloc(m_cpuPtr, m_cpuBase, m_size, m_hints, m_align);
             m_exists |= CPU;
+            m_dirty |= CPU;
         }
         validateCPU(async, cudaStream, validSize);
     }
@@ -253,9 +272,14 @@ void Buffer::setOwner(Module module, bool modify, bool async, CUstream cudaStrea
         FW_ASSERT((m_exists & CPU) != 0);
         if (validSize)
         {
+            profilePush("glBufferSubData");
+            GLint oldBuffer;
+            glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldBuffer);
             glBindBuffer(GL_ARRAY_BUFFER, m_glBuffer);
             glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)validSize, m_cpuPtr);
+            glBindBuffer(GL_ARRAY_BUFFER, oldBuffer);
             GLContext::checkErrors();
+            profilePop();
         }
         m_dirty &= ~GL;
     }
@@ -330,13 +354,8 @@ void Buffer::writeToStream(OutputStream& s) const
 void Buffer::init(S64 size, U32 hints, int align)
 {
     FW_ASSERT(size >= 0);
-    FW_ASSERT((hints & ~Hint_All) == 0);
-    FW_ASSERT(align > 0);
 
-    if (align != 1)
-        hints &= ~Hint_CudaGL;
-
-    m_hints     = hints;
+    m_hints     = validateHints(hints, align, Module_None);
     m_align     = align;
     m_size      = size;
     m_original  = Module_None;
@@ -350,6 +369,21 @@ void Buffer::init(S64 size, U32 hints, int align)
     m_cudaPtr   = NULL;
     m_cudaBase  = NULL;
     m_cudaGLReg = false;
+}
+
+//------------------------------------------------------------------------
+
+U32 Buffer::validateHints(U32 hints, int align, Module original)
+{
+    FW_ASSERT((hints & ~Hint_All) == 0);
+    FW_ASSERT(align > 0);
+
+    U32 res = Hint_None;
+    if ((hints & Hint_PageLock) != 0 && original != CPU)
+        res |= Hint_PageLock;
+    if ((hints & Hint_CudaGL) != 0 && original != Cuda && align == 1 && isAvailable_cuGLRegisterBufferObject())
+        res |= Hint_CudaGL;
+    return res;
 }
 
 //------------------------------------------------------------------------
@@ -375,13 +409,11 @@ void Buffer::wrap(Module module, S64 size)
     FW_ASSERT(size >= 0);
     FW_ASSERT(m_exists == Module_None);
 
-    m_align     = 1;
+    m_hints     = validateHints(m_hints, m_align, module);
     m_size      = size;
     m_original  = module;
     m_owner     = module;
     m_exists    = module;
-
-    setHintsAndAlign(m_hints, m_align);
 }
 
 //------------------------------------------------------------------------
@@ -470,11 +502,13 @@ void Buffer::validateCPU(bool async, CUstream cudaStream, S64 validSize)
 
     Module source = Module_None;
     for (int i = 1; i < (int)Module_All; i <<= 1)
+    {
         if (i != CPU && (m_exists & i) != 0 && (m_dirty & i) == 0)
         {
             source = (Module)i;
             break;
         }
+    }
 
     // No source => done.
 
@@ -498,9 +532,14 @@ void Buffer::validateCPU(bool async, CUstream cudaStream, S64 validSize)
 
     if (source == GL)
     {
+        profilePush("glGetBufferSubData");
+        GLint oldBuffer;
+        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldBuffer);
         glBindBuffer(GL_ARRAY_BUFFER, m_glBuffer);
         glGetBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)validSize, m_cpuPtr);
+        glBindBuffer(GL_ARRAY_BUFFER, oldBuffer);
         GLContext::checkErrors();
+        profilePop();
     }
     else
     {
@@ -552,10 +591,14 @@ void Buffer::glAlloc(GLuint& glBuffer, S64 size, const void* data)
 {
     FW_ASSERT(size >= 0);
     GLContext::staticInit();
+
+    GLint oldBuffer;
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldBuffer);
     glGenBuffers(1, &glBuffer);
     glBindBuffer(GL_ARRAY_BUFFER, glBuffer);
     checkSize(size, sizeof(GLsizeiptr) * 8 - 1, "glBufferData");
     glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)size, data, GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, oldBuffer);
     GLContext::checkErrors();
 }
 
@@ -597,7 +640,7 @@ void Buffer::cudaAlloc(CUdeviceptr& cudaPtr, CUdeviceptr& cudaBase, bool& cudaGL
             CudaModule::checkError("cuGLRegisterBufferObject", cuGLRegisterBufferObject(glBuffer));
             cudaGLReg = true;
         }
-        unsigned int size;
+        CUsize_t size;
         FW_ASSERT(align == 1);
         CudaModule::checkError("cuGLMapBufferObject", cuGLMapBufferObject(&cudaBase, &size, glBuffer));
         cudaPtr = cudaBase;
@@ -633,20 +676,46 @@ void Buffer::checkSize(S64 size, int bits, const String& funcName)
 
 void Buffer::memcpyXtoX(void* dstHost, CUdeviceptr dstDevice, const void* srcHost, CUdeviceptr srcDevice, S64 size, bool async, CUstream cudaStream)
 {
+    CUresult res;
     if (size <= 0)
         return;
 
     // Try to copy.
 
-    CUresult res = CUDA_SUCCESS;
     if (dstHost && srcHost)
+    {
         memcpy(dstHost, srcHost, (size_t)size);
+        res = CUDA_SUCCESS;
+    }
     else if (srcHost)
-        res = (async) ? cuMemcpyHtoDAsync(dstDevice, srcHost, (U32)size, cudaStream) : cuMemcpyHtoD(dstDevice, srcHost, (U32)size);
+    {
+        profilePush("cuMemcpyHtoD");
+        if (async && isAvailable_cuMemcpyHtoDAsync())
+            res = cuMemcpyHtoDAsync(dstDevice, srcHost, (U32)size, cudaStream);
+        else
+            res = cuMemcpyHtoD(dstDevice, srcHost, (U32)size);
+        profilePop();
+    }
     else if (dstHost)
-        res = (async) ? cuMemcpyDtoHAsync(dstHost, srcDevice, (U32)size, cudaStream) : cuMemcpyDtoH(dstHost, srcDevice, (U32)size);
+    {
+        profilePush("cuMemcpyDtoH");
+        if (async && isAvailable_cuMemcpyDtoHAsync())
+            res = cuMemcpyDtoHAsync(dstHost, srcDevice, (U32)size, cudaStream);
+        else
+            res = cuMemcpyDtoH(dstHost, srcDevice, (U32)size);
+        profilePop();
+    }
     else
-        res = cuMemcpyDtoD(dstDevice, srcDevice, (U32)size);
+    {
+        profilePush("cuMemcpyDtoD");
+#if (CUDA_VERSION >= 3000)
+        if (async && isAvailable_cuMemcpyDtoDAsync())
+            res = cuMemcpyDtoDAsync(dstDevice, srcDevice, (U32)size, cudaStream);
+        else
+#endif
+            res = cuMemcpyDtoD(dstDevice, srcDevice, (U32)size);
+        profilePop();
+    }
 
     // Success => done.
 
@@ -656,7 +725,7 @@ void Buffer::memcpyXtoX(void* dstHost, CUdeviceptr dstDevice, const void* srcHos
     // Single byte => fail.
 
     if (size == 1)
-        fail("Buffer::memcpyXtoX() failed!");
+        CudaModule::checkError("cuMemcpyXtoX", res);
 
     // Otherwise => subdivide.
     // CUDA driver does not allow memcpy() to cross allocation boundaries.

@@ -186,6 +186,7 @@ public:
 
     String                  getStats                (void) const;
     S64                     getFreeBytes            (void) const                    { return m_mem.getFreeBytes(); }
+    S64                     getUsedBytes            (void) const                    { return m_mem.getTotalBytes() - m_mem.getFreeBytes(); }
 
     static U8               getNodeValidMask        (const S32* node)               { return (U8)(node[0] >> 8); }
     static bool             hasNodeChild            (const S32* node, int childIdx) { FW_ASSERT(childIdx >= 0 && childIdx < 8); return ((node[0] & (0x0100 << childIdx)) != 0); }

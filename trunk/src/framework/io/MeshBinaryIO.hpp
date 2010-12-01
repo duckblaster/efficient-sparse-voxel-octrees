@@ -33,7 +33,7 @@ void        exportBinaryMesh    (OutputStream& stream, const MeshBase* mesh);
 //------------------------------------------------------------------------
 /*
 
-Binary mesh file format v3
+Binary mesh file format v4
 --------------------------
 
 - the basic units of data are 32-bit little-endian ints and floats
@@ -48,7 +48,7 @@ BinaryMesh
 
 MeshHeader
     0       2       bytes   v1  formatID (must be "BinMesh ")
-    2       1       int     v1  formatVersion (must be 2)
+    2       1       int     v1  formatVersion (must be 4)
     3       1       int     v1  numAttribs
     4       1       int     v1  numVertices
     5       1       int     v2  numTextures
@@ -80,9 +80,11 @@ Submesh
     12      1       float   v3  displacementBias
     13      1       int     v2  diffuseTexture (-1 if none)
     14      1       int     v2  alphaTexture (-1 if none)
-    15      1       int     v3  dispTexture (-1 if none)
-    16      1       int     v1  numTriangles
-    17      n*3     int     v1  indices
+    15      1       int     v3  displacementTexture (-1 if none)
+    16      1       int     v4  normalTexture (-1 if none)
+    17      1       int     v4  environmentTexture (-1 if none)
+    18      1       int     v1  numTriangles
+    19      n*3     int     v1  indices
     ?
 
 */

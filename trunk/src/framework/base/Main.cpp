@@ -60,13 +60,9 @@ int main(int argc, char* argv[])
     _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
 #endif
 
-    // Initialize the framework.
-
-    initDLLImports();
-    failIfError();
-
     // Initialize the application.
 
+    Thread::getCurrent();
     FW::init();
     failIfError();
 
@@ -74,10 +70,12 @@ int main(int argc, char* argv[])
 
     while (Window::getNumOpen())
     {
-        Window::realizeAll();
-
         MSG msg;
-        GetMessage(&msg, NULL, 0, 0);
+        if (!PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+        {
+            Window::realizeAll();
+            GetMessage(&msg, NULL, 0, 0);
+        }
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
@@ -96,7 +94,7 @@ int main(int argc, char* argv[])
     while (hasLogFile())
         popLogFile();
 
-    Thread::staticDeinit();
+    delete Thread::getCurrent();
 
     // Dump memory leaks.
 

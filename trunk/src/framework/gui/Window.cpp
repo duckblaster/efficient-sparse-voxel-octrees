@@ -33,6 +33,7 @@ static const char* const    s_windowClassName   = "FrameworkWindowClass";
 
 bool            Window::s_inited    = false;
 Array<Window*>* Window::s_open      = NULL;
+bool            Window::s_ignoreRepaint = false;
 
 //------------------------------------------------------------------------
 
@@ -78,8 +79,11 @@ Window::~Window(void)
 
 void Window::setTitle(const String& title)
 {
+    if (m_title != title)
+    {
     m_title = title;
     SetWindowText(m_hwnd, title.getPtr());
+}
 }
 
 //------------------------------------------------------------------------
@@ -203,6 +207,10 @@ void Window::repaint(void)
 
 void Window::repaintNow(void)
 {
+    if (s_ignoreRepaint)
+        return;
+    s_ignoreRepaint = true;
+
     if (m_glConfigDirty)
     {
         m_glConfigDirty = false;
@@ -212,23 +220,25 @@ void Window::repaintNow(void)
     Vec2i size = getSize();
     if (size.x > 0 && size.y > 0)
     {
-        if (m_prevSize != size && !getDiscardEvents())
+        getGL()->setView(0, size);
+        if (!getDiscardEvents())
         {
+            s_ignoreRepaint = false;
+            if (m_prevSize != size)
+            {
             m_prevSize = size;
             postEvent(createSimpleEvent(EventType_Resize));
         }
-
-        getGL()->makeCurrent();
-        if (!getDiscardEvents())
-        {
-            getGL()->setView(0, size);
             postEvent(createSimpleEvent(EventType_PrePaint));
             postEvent(createSimpleEvent(EventType_Paint));
             postEvent(createSimpleEvent(EventType_PostPaint));
+            s_ignoreRepaint = true;
         }
         getGL()->swapBuffers();
     }
+
     Thread::yield();
+    s_ignoreRepaint = false;
 }
 
 //------------------------------------------------------------------------
@@ -407,6 +417,9 @@ String Window::showFileDialog(const String& title, bool save, const String& filt
 
 void Window::showModalMessage(const String& msg)
 {
+    if (!m_isRealized || !m_isVisible)
+        return;
+
     GLContext* gl = getGL();
     for (int i = 0; i < 3; i++)
     {

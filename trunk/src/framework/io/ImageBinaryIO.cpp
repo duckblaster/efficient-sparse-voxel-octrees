@@ -118,6 +118,9 @@ void FW::exportBinaryImage(OutputStream& stream, const Image* image)
 
     // Image data.
 
+    if (image->getStride() == size.x * bpp)
+        stream.write(image->getPtr(), size.x * size.y * bpp);
+    else
     for (int y = 0; y < size.y; y++)
         stream.write(image->getPtr(Vec2i(0, y)), size.x * bpp);
 }

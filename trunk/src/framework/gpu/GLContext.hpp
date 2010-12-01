@@ -56,7 +56,7 @@ public:
 
         Config(void)
         {
-            numSamples  = 0;
+            numSamples  = 1;
             isStereo    = false;
         }
     };
@@ -74,6 +74,7 @@ public:
 
                         ~Program        (void);
 
+        GLuint          getHandle       (void) const                { return m_glProgram; }
         GLint           getAttribLoc    (const String& name) const;
         GLint           getUniformLoc   (const String& name) const;
 
@@ -136,7 +137,7 @@ public:
     const Vec2f&        getViewScale    (void) const        { return m_viewScale; }
 
     Mat4f               xformFitToView  (const Vec2f& pos, const Vec2f& size) const { return Mat4f::fitToView(pos, size, m_viewSize); }
-    Mat4f               xformMatchPixels(void) const        { return Mat4f().preScale(Vec4f(m_viewScale, 1.0f, 1.0f)).preXlate(Vec3f(-1.0f, -1.0f, 0.0f)); }
+    Mat4f               xformMatchPixels(void) const        { return Mat4f::translate(Vec3f(-1.0f, -1.0f, 0.0f)) * Mat4f::scale(Vec3f(m_viewScale, 1.0f)); }
     Mat4f               xformMouseToUser(const Mat4f& userToClip) const;
 
     void                setAttrib       (int loc, int size, GLenum type, int stride, Buffer* buffer, const void* pointer);
@@ -180,8 +181,8 @@ public:
     Vec2i               drawLabel       (const String& str, const Vec2f& pos, U32 abgr) { return drawLabel(str, Vec4f(pos, 0.0f, 1.0f), 0.5f, abgr); }
     void                drawModalMessage(const String& msg);
 
-    void                drawImage       (Image& image, const Vec4f& pos, const Vec2f& align, bool topToBottom = true);
-    void                drawImage       (Image& image, const Vec2f& pos, const Vec2f& align = 0.5f, bool topToBottom = true) { drawImage(image, Vec4f(pos, 0.0f, 1.0f), align, topToBottom); }
+    void                drawImage       (const Image& image, const Vec4f& pos, const Vec2f& align, bool topToBottom = true);
+    void                drawImage       (const Image& image, const Vec2f& pos, const Vec2f& align = 0.5f, bool topToBottom = true) { drawImage(image, Vec4f(pos, 0.0f, 1.0f), align, topToBottom); }
 
     Program*            getProgram      (const String& id) const;
     void                setProgram      (const String& id, Program* prog);

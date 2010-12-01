@@ -44,7 +44,9 @@ public:
     OctreeRuntime*      getRuntime          (void) const                { return m_runtime; }
     CudaRenderer*       getRenderer         (void) const                { return m_renderer; }
 
-    void                load                (const String& fileName, int numLevels = OctreeFile::UnitScale);
+    void                setFile             (const String& fileName);
+    void                clearRuntime        (void);
+    void                load                (int numLevels = OctreeFile::UnitScale);
 
     void                setCamera           (const String& signature)   { m_camera.decodeSignature(signature); failIfError(); }
     Mat4f               getOctreeToWorld    (int objectID = 0) const;
@@ -60,10 +62,6 @@ public:
     virtual bool        handleEvent         (const Window::Event& ev);
 
     static BuilderBase::Params readBuildParams(const String& stateFile);
-
-private:
-    void                setFile             (const String& fileName);
-    void                clearRuntime        (void);
 
 private:
                         BenchmarkContext    (const BenchmarkContext&); // forbidden

@@ -44,11 +44,22 @@
 namespace FW
 {
 #if !FW_CUDA
+void    setCudaDLLName      (const String& name);
 void    initDLLImports      (void);
 void    initGLImports       (void);
 void    deinitDLLImports    (void);
 #endif
 }
+
+//------------------------------------------------------------------------
+// CUDA definitions.
+//------------------------------------------------------------------------
+
+#if (CUDA_VERSION < 3020)
+typedef unsigned int    CUsize_t;
+#else
+typedef size_t          CUsize_t;
+#endif
 
 //------------------------------------------------------------------------
 // GL definitions.
@@ -91,11 +102,15 @@ typedef unsigned int    GLhandleARB;
 #define GL_INFO_LOG_LENGTH                  0x8B84
 #define GL_INVALID_FRAMEBUFFER_OPERATION    0x0506
 #define GL_LINK_STATUS                      0x8B82
+#define GL_PIXEL_PACK_BUFFER                0x88EB
 #define GL_PIXEL_UNPACK_BUFFER              0x88EC
 #define GL_RENDERBUFFER                     0x8D41
-#define GL_RGB32F_ARB                       0x8815
-#define GL_RGBA32F_ARB                      0x8814
+#define GL_RGB32F                           0x8815
+#define GL_RGBA32F                          0x8814
+#define GL_RGBA32UI                         0x8D70
+#define GL_RGBA_INTEGER                     0x8D99
 #define GL_STATIC_DRAW                      0x88E4
+#define GL_DYNAMIC_COPY                     0x88EA
 #define GL_TEXTURE0                         0x84C0
 #define GL_TEXTURE1                         0x84C1
 #define GL_TEXTURE_3D                       0x806F
@@ -104,6 +119,10 @@ typedef unsigned int    GLhandleARB;
 #define GL_UNSIGNED_SHORT_5_5_5_1           0x8034
 #define GL_UNSIGNED_SHORT_5_6_5             0x8363
 #define GL_VERTEX_SHADER                    0x8B31
+#define GL_ARRAY_BUFFER_BINDING             0x8894
+#define GL_READ_FRAMEBUFFER                 0x8CA8
+#define GL_DRAW_FRAMEBUFFER                 0x8CA9
+#define GL_TEXTURE_MAX_ANISOTROPY_EXT       0x84FE
 
 #define WGL_ACCELERATION_ARB                0x2003
 #define WGL_ACCUM_BITS_ARB                  0x201D
@@ -122,6 +141,8 @@ typedef unsigned int    GLhandleARB;
 #define WGL_STEREO_ARB                      0x2012
 #define WGL_SUPPORT_OPENGL_ARB              0x2010
 #define WGL_TYPE_RGBA_ARB                   0x202B
+#define WGL_NUMBER_OVERLAYS_ARB             0x2008
+#define WGL_NUMBER_UNDERLAYS_ARB            0x2009
 
 #endif
 
@@ -129,12 +150,14 @@ typedef unsigned int    GLhandleARB;
 
 #if !FW_CUDA
 #   define FW_DLL_IMPORT_RETV(RET, CALL, NAME, PARAMS, PASS)    bool isAvailable_ ## NAME(void);
-#   define FW_DLL_IMPORT_VOID(RET, CALL, NAME, PARAMS, PASS)    FW_DLL_IMPORT_RETV(RET, CALL, NAME, PARAMS, PASS)
-#   define FW_DLL_DECLARE_RETV(RET, CALL, NAME, PARAMS, PASS)   FW_DLL_IMPORT_RETV(RET, CALL, NAME, PARAMS, PASS) RET CALL NAME PARAMS;
-#   define FW_DLL_DECLARE_VOID(RET, CALL, NAME, PARAMS, PASS)   FW_DLL_DECLARE_RETV(RET, CALL, NAME, PARAMS, PASS)
+#   define FW_DLL_IMPORT_VOID(RET, CALL, NAME, PARAMS, PASS)    bool isAvailable_ ## NAME(void);
+#   define FW_DLL_IMPORT_CUV2(RET, CALL, NAME, PARAMS, PASS)    bool isAvailable_ ## NAME(void);
+#   define FW_DLL_DECLARE_RETV(RET, CALL, NAME, PARAMS, PASS)   bool isAvailable_ ## NAME(void); RET CALL NAME PARAMS;
+#   define FW_DLL_DECLARE_VOID(RET, CALL, NAME, PARAMS, PASS)   bool isAvailable_ ## NAME(void); RET CALL NAME PARAMS;
 #   include "base/DLLImports.inl"
 #   undef FW_DLL_IMPORT_RETV
 #   undef FW_DLL_IMPORT_VOID
+#   undef FW_DLL_IMPORT_CUV2
 #   undef FW_DLL_DECLARE_RETV
 #   undef FW_DLL_DECLARE_VOID
 #endif

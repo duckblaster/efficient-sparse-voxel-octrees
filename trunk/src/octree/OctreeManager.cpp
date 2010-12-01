@@ -417,7 +417,7 @@ void OctreeManager::renderInternal(GLContext* gl, int objectID, const Mat4f& wor
     {
         profilePush("Update runtime");
         octreeToCamera = worldToCamera * obj.objectToWorld * obj.octreeToObject;
-        Vec3f cameraInOctree = Vec4f(octreeToCamera.inv().col(3)).getXYZ();
+        Vec3f cameraInOctree = Vec4f(octreeToCamera.inverted().col(3)).getXYZ();
         F32 timeLimit = min(frameDelta * (F32)UpdateTimePct / 100.0f, (F32)UpdateTimeMaxMillis / 1000.0f);
         m_updateTimer.start();
         updateRuntime(obj.rootSlice, cameraInOctree, timeLimit);
@@ -455,7 +455,7 @@ void OctreeManager::renderInternal(GLContext* gl, int objectID, const Mat4f& wor
             if (m_dynamicLoad && m_dynamicBuild && isEditable())
                 gl->drawModalMessage("Building root slice...");
             else
-                gl->drawModalMessage("No slices loaded!");
+            gl->drawModalMessage("No slices loaded!");
         }
         else
         {

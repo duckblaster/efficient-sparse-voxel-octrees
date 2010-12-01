@@ -20,9 +20,8 @@ using namespace FW;
 
 //------------------------------------------------------------------------
 
-bool                Thread::s_inited        = false;
-Spinlock*           Thread::s_lock          = NULL;
-Hash<U32, Thread*>* Thread::s_threads       = NULL;
+Spinlock            Thread::s_lock;
+Hash<U32, Thread*>  Thread::s_threads;
 Thread*             Thread::s_mainThread    = NULL;
 
 //------------------------------------------------------------------------
@@ -184,62 +183,72 @@ void Monitor::notifyAll(void)
 //------------------------------------------------------------------------
 
 Thread::Thread(void)
-:   m_id        (0),
-    m_handle    (NULL)
+:   m_refCount  (0),
+    m_id        (0),
+    m_handle    (NULL),
+    m_priority  (Priority_Normal)
 {
-    staticInit();
 }
 
 //------------------------------------------------------------------------
 
 Thread::~Thread(void)
 {
-    if (this != s_mainThread)
+    // Wait and exit.
+
+    if (this != getCurrent())
         join();
-    exited();
+    else
+    {
+        failIfError();
+        refer();
+        m_exited = true;
+        unrefer();
+}
+
+    // Deinit user data.
+
+    for (int i = m_userData.firstSlot(); i != -1; i = m_userData.nextSlot(i))
+    {
+        const UserData& data = m_userData.getSlot(i).value;
+        if (data.deinitFunc)
+            data.deinitFunc(data.data);
+    }
 }
 
 //------------------------------------------------------------------------
 
 void Thread::start(ThreadFunc func, void* param)
 {
+    m_startLock.enter();
     join();
-    s_lock->enter();
 
     StartParams params;
     params.thread       = this;
     params.userFunc     = func;
     params.userParam    = param;
-    params.parentReady.acquire();
-    params.childReady.acquire();
+    params.ready.acquire();
 
-    DWORD id;
-    m_handle = CreateThread(NULL, 0, threadProc, &params, 0, &id);
-    m_id = id;
-    if (!m_handle)
+    if (!CreateThread(NULL, 0, threadProc, &params, 0, NULL))
         failWin32Error("CreateThread");
 
-    started();
-    s_lock->leave();
-
-    params.parentReady.release();
-    params.childReady.acquire();
+    params.ready.acquire();
+    m_startLock.leave();
 }
 
 //------------------------------------------------------------------------
 
 Thread* Thread::getCurrent(void)
 {
-    staticInit();
-    s_lock->enter();
-    Thread** found = s_threads->search(getID());
+    s_lock.enter();
+    Thread** found = s_threads.search(getID());
     Thread* thread = (found) ? *found : NULL;
-    s_lock->leave();
+    s_lock.leave();
 
     if (!thread)
     {
         thread = new Thread;
-        thread->setCurrent();
+        thread->started();
     }
     return thread;
 }
@@ -248,8 +257,7 @@ Thread* Thread::getCurrent(void)
 
 Thread* Thread::getMain(void)
 {
-    staticInit();
-    FW_ASSERT(s_mainThread);
+    getCurrent();
     return s_mainThread;
 }
 
@@ -257,8 +265,8 @@ Thread* Thread::getMain(void)
 
 bool Thread::isMain(void)
 {
-    staticInit();
-    return (!s_mainThread || getID() == s_mainThread->m_id);
+    Thread* curr = getCurrent();
+    return (curr == s_mainThread);
 }
 
 //------------------------------------------------------------------------
@@ -284,119 +292,172 @@ void Thread::yield(void)
 
 //------------------------------------------------------------------------
 
-Thread::Priority Thread::getPriority(void) const
+int Thread::getPriority(void)
 {
-    HANDLE handle = m_handle;
-    if (!handle)
-        return Priority_Normal;
+    refer();
+    if (m_handle)
+        m_priority = GetThreadPriority(m_handle);
+    unrefer();
 
-    int res = GetThreadPriority(handle);
-    if (res == THREAD_PRIORITY_ERROR_RETURN)
+    if (m_priority == THREAD_PRIORITY_ERROR_RETURN)
         failWin32Error("GetThreadPriority");
-    return (Priority)res;
+    return m_priority;
 }
 
 //------------------------------------------------------------------------
 
-void Thread::setPriority(Priority priority)
+void Thread::setPriority(int priority)
 {
-    HANDLE handle = m_handle;
-    if (handle && !SetThreadPriority(handle, priority))
+    refer();
+    m_priority = priority;
+    if (m_handle && !SetThreadPriority(m_handle, priority))
         failWin32Error("SetThreadPriority");
+    unrefer();
 }
 
 //------------------------------------------------------------------------
 
 bool Thread::isAlive(void)
 {
-    HANDLE handle = m_handle;
-    if (!handle)
-        return false;
+    bool alive = false;
+    refer();
 
+    if (m_handle)
+    {
     DWORD exitCode;
-    if (!GetExitCodeThread(handle, &exitCode))
+        if (!GetExitCodeThread(m_handle, &exitCode))
         failWin32Error("GetExitCodeThread");
-    if (exitCode == STILL_ACTIVE)
-        return true;
 
-    s_lock->enter();
-    exited();
-    s_lock->leave();
-    return false;
+    if (exitCode == STILL_ACTIVE)
+            alive = true;
+        else
+            m_exited = true;
+    }
+
+    unrefer();
+    return alive;
 }
 
 //------------------------------------------------------------------------
 
 void Thread::join(void)
 {
-    FW_ASSERT(this != s_mainThread);
+    FW_ASSERT(this != getMain());
     FW_ASSERT(this != getCurrent());
 
-    HANDLE handle = m_handle;
-    if (!handle)
-        return;
-
-    if (WaitForSingleObject(handle, INFINITE) == WAIT_FAILED)
+    refer();
+    if (m_handle && WaitForSingleObject(m_handle, INFINITE) == WAIT_FAILED)
         failWin32Error("WaitForSingleObject");
-
-    s_lock->enter();
-    exited();
-    s_lock->leave();
+    m_exited = true;
+    unrefer();
 }
 
 //------------------------------------------------------------------------
 
-void Thread::staticInit(void)
+void* Thread::getUserData(const String& id)
 {
-    if (s_inited)
-        return;
-    s_inited = true;
-
-    FW_ASSERT(!s_lock && !s_threads && !s_mainThread);
-    s_lock = new Spinlock();
-    s_threads = new Hash<U32, Thread*>;
-    s_mainThread = new Thread;
-    s_mainThread->setCurrent();
+    m_lock.enter();
+    UserData* found = m_userData.search(id);
+    void* data = (found) ? found->data : NULL;
+    m_lock.leave();
+    return data;
 }
 
 //------------------------------------------------------------------------
 
-void Thread::staticDeinit(void)
+void Thread::setUserData(const String& id, void* data, DeinitFunc deinitFunc)
 {
-    if (!s_inited)
-        return;
-    s_inited = false;
+    UserData oldData;
+    oldData.data = NULL;
+    oldData.deinitFunc = NULL;
 
-    delete s_mainThread;
-    s_mainThread = NULL;
+    UserData newData;
+    newData.data = data;
+    newData.deinitFunc = deinitFunc;
 
-    delete s_lock;
-    s_lock = NULL;
+    // Replace data.
 
-    delete s_threads;
-    s_threads = NULL;
+    m_lock.enter();
+
+    UserData* found = m_userData.search(id);
+    if (found)
+    {
+        oldData = *found;
+        *found = newData;
+    }
+
+    if ((found != NULL) != (data != NULL || deinitFunc != NULL))
+    {
+        if (found)
+            m_userData.remove(id);
+        else
+            m_userData.add(id, newData);
+    }
+
+    m_lock.leave();
+
+    // Deinit old data.
+
+    if (oldData.deinitFunc)
+        oldData.deinitFunc(oldData.data);
 }
 
 //------------------------------------------------------------------------
 
-void Thread::setCurrent(void)
+void Thread::suspendAll(void)
 {
-    m_id = getID();
-    m_handle = OpenThread(THREAD_ALL_ACCESS, FALSE, m_id);
-    if (!m_handle)
-        failWin32Error("OpenThread");
+    s_lock.enter();
+    for (int i = s_threads.firstSlot(); i != -1; i = s_threads.nextSlot(i))
+    {
+        Thread* thread = s_threads.getSlot(i).value;
+        thread->refer();
+        if (thread->m_handle && thread->m_id != getID())
+            SuspendThread(thread->m_handle);
+        thread->unrefer();
+    }
+    s_lock.leave();
+}
 
-    s_lock->enter();
-    started();
-    s_lock->leave();
+//------------------------------------------------------------------------
+
+void Thread::refer(void)
+{
+    m_lock.enter();
+    m_refCount++;
+    m_lock.leave();
+}
+
+//------------------------------------------------------------------------
+
+void Thread::unrefer(void)
+{
+    m_lock.enter();
+    if (--m_refCount == 0 && m_exited)
+    {
+        m_exited = false;
+        exited();
+}
+    m_lock.leave();
 }
 
 //------------------------------------------------------------------------
 
 void Thread::started(void)
 {
-    if (!s_threads->contains(m_id))
-        s_threads->add(m_id, this);
+    m_id = getID();
+    m_handle = OpenThread(THREAD_ALL_ACCESS, FALSE, m_id);
+    if (!m_handle)
+        failWin32Error("OpenThread");
+
+    s_lock.enter();
+
+    if (!s_mainThread)
+        s_mainThread = this;
+
+    if (!s_threads.contains(m_id))
+        s_threads.add(m_id, this);
+
+    s_lock.leave();
 }
 
 //------------------------------------------------------------------------
@@ -406,12 +467,22 @@ void Thread::exited(void)
     if (!m_handle)
         return;
 
-    if (s_threads->contains(m_id))
-        s_threads->remove(m_id);
-    m_id = 0;
+    s_lock.enter();
+
+    if (this == s_mainThread)
+        s_mainThread = NULL;
+
+    if (s_threads.contains(m_id))
+        s_threads.remove(m_id);
+
+    if (!s_threads.getSize())
+        s_threads.reset();
+
+    s_lock.leave();
 
     if (m_handle)
         CloseHandle(m_handle);
+    m_id = 0;
     m_handle = NULL;
 }
 
@@ -424,13 +495,34 @@ DWORD WINAPI Thread::threadProc(LPVOID lpParameter)
     ThreadFunc      userFunc    = params->userFunc;
     void*           userParam   = params->userParam;
 
-    params->parentReady.acquire();
-    params->childReady.release();
+    // Initialize.
+
+    thread->started();
+    thread->setPriority(thread->m_priority);
+    params->ready.release();
+
+    // Execute.
+
     userFunc(userParam);
 
-    s_lock->enter();
-    thread->exited();
-    s_lock->leave();
+    // Check whether the thread object still exists,
+    // as userFunc() may have deleted it.
+
+    s_lock.enter();
+    bool exists = s_threads.contains(getID());
+    s_lock.leave();
+
+    // Still exists => deinit.
+
+    if (exists)
+    {
+        failIfError();
+        thread->getPriority();
+
+        thread->refer();
+        thread->m_exited = true;
+        thread->unrefer();
+    }
     return 0;
 }
 

@@ -83,7 +83,7 @@ File::AsyncOp::AsyncOp(HANDLE fileHandle)
     m_done          (false),
     m_failed        (false)
 {
-    FW::memset(&m_overlapped, 0, sizeof(m_overlapped));
+    memset(&m_overlapped, 0, sizeof(m_overlapped));
 
     // Create event object. Without one, GetOverlappedResult()
     // occassionally fails to wait long enough on WinXP.
@@ -462,10 +462,11 @@ void File::startOp(AsyncOp* op)
     // Backup parameters.
 
     FW_ASSERT(op);
-    S64 offset   = op->m_offset;
-    S32 numBytes = op->m_numBytes;
-    U8* readPtr  = (U8*)op->m_readPtr;
-    U8* writePtr = (U8*)op->m_writePtr;
+    S64 offset          = op->m_offset;
+    S32 numBytes        = op->m_numBytes;
+    S32 expectedBytes   = op->m_expectedBytes;
+    U8* readPtr         = (U8*)op->m_readPtr;
+    U8* writePtr        = (U8*)op->m_writePtr;
 
     // Nothing to do => skip.
 
@@ -477,7 +478,7 @@ void File::startOp(AsyncOp* op)
 
     // Write past the end of file => expand.
 
-    S64 sizeNeeded = op->m_offset + op->m_numBytes;
+    S64 sizeNeeded = offset + numBytes;
     if (op->m_writePtr && m_actualSize < sizeNeeded)
     {
         if (m_disableCache)
@@ -499,6 +500,7 @@ void File::startOp(AsyncOp* op)
 
         blockOp->m_offset   = offset + pos;
         blockOp->m_numBytes = min(numBytes - pos, (S32)MaxBytesPerSysCall);
+        blockOp->m_expectedBytes = min(expectedBytes - pos, blockOp->m_numBytes);
         blockOp->m_readPtr  = (readPtr)  ? readPtr + pos  : NULL;
         blockOp->m_writePtr = (writePtr) ? writePtr + pos : NULL;
 

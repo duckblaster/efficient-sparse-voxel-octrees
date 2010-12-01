@@ -17,6 +17,8 @@
 #include "base/String.hpp"
 
 #include <stdio.h>
+#include <time.h>
+#include <ctype.h>
 
 using namespace FW;
 
@@ -77,6 +79,70 @@ String String::substring(int start, int end) const
     Array<char>::copy(res.m_chars.getPtr(), m_chars.getPtr(start), end - start);
     res.m_chars[end - start] = '\0';
     return res;
+}
+
+//------------------------------------------------------------------------
+
+String String::trimStart(void) const
+{
+	int len = getLength();
+	for (int i=0; i < len; i++)
+		if (!isspace(m_chars[i]))
+			return substring(i, getLength());
+	return "";
+}
+
+//------------------------------------------------------------------------
+
+String String::trimEnd(void) const
+{
+	int len = getLength();
+	for (int i=len-1; i >= 0; i--)
+		if (!isspace(m_chars[i]))
+			return substring(0, i+1);
+	return "";
+}
+
+//------------------------------------------------------------------------
+
+String String::trim(void) const
+{
+	int len = getLength();
+	int idx = -1;
+	
+	for (int i=0; i < len; i++)
+	{
+		if (!isspace(m_chars[i]))
+		{
+			idx = i;
+			break;
+		}
+	}
+	
+	if (idx == -1)
+		return "";
+	
+	for (int i=len-1; i >= 0; i--)
+		if (!isspace(m_chars[i]))
+			return substring(idx, i+1);
+
+	return ""; // unreachable
+}
+
+//------------------------------------------------------------------------
+
+void String::split(char chr, Array<String>& pieces, bool includeEmpty) const
+{
+	int n = 0;
+	while (n <= getLength())
+	{
+		int c = indexOf(chr, n);
+		if (c < 0)
+			c = getLength();
+		if (c != n || includeEmpty)
+			pieces.add(substring(n, c));
+		n = c+1;
+	}
 }
 
 //------------------------------------------------------------------------
@@ -231,6 +297,27 @@ int String::strcmp(const char* a, const char* b)
 
 //------------------------------------------------------------------------
 
+String FW::getDateString(void)
+{
+    // Query and format.
+
+    char buffer[256];
+    time_t currTime;
+    time(&currTime);
+    if (ctime_s(buffer, sizeof(buffer), &currTime) != 0)
+        fail("ctime_s() failed!");
+
+    // Strip linefeed.
+
+    char* ptr = buffer;
+    while (*ptr && *ptr != '\n' && *ptr != '\r')
+        ptr++;
+    *ptr = 0;
+    return buffer;
+}
+
+//------------------------------------------------------------------------
+
 bool FW::parseSpace(const char*& ptr)
 {
     FW_ASSERT(ptr);
@@ -314,6 +401,30 @@ bool FW::parseFloat(const char*& ptr, F32& value)
         return false;
 
     ptr = tmp;
+    if (*ptr == '#')
+    {
+        if (parseLiteral(ptr, "#INF"))
+        {
+            value = bitsToFloat((neg) ? 0xFF800000 : 0x7F800000);
+            return true;
+        }
+        if (parseLiteral(ptr, "#SNAN"))
+        {
+            value = bitsToFloat((neg) ? 0xFF800001 : 0x7F800001);
+            return true;
+        }
+        if (parseLiteral(ptr, "#QNAN"))
+        {
+            value = bitsToFloat((neg) ? 0xFFC00001 : 0x7FC00001);
+            return true;
+        }
+        if (parseLiteral(ptr, "#IND"))
+        {
+            value = bitsToFloat((neg) ? 0xFFC00000 : 0x7FC00000);
+            return true;
+        }
+    }
+
     S32 e = 0;
     if ((parseChar(tmp, 'e') || parseChar(tmp, 'E')) && parseInt(tmp, e))
     {

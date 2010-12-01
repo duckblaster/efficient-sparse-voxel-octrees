@@ -15,7 +15,7 @@
  */
  
 #include "base/Timer.hpp"
-#include "base/DLLImports.hpp"
+#include "base/Thread.hpp"
 
 using namespace FW;
 
@@ -38,6 +38,9 @@ F32 Timer::end(void)
 
 S64 Timer::queryTicks(void)
 {
+    if (!Thread::isMain())
+        fail("Timers can only be used in the main thread!");
+
     LARGE_INTEGER ticks;
     if (!QueryPerformanceCounter(&ticks))
         failWin32Error("QueryPerformanceCounter");

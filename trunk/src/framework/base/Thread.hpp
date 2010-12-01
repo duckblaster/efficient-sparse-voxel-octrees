@@ -92,8 +92,9 @@ class Thread
 {
 public:
     typedef void        (*ThreadFunc)   (void* param);
+    typedef void (*DeinitFunc)(void* data);
 
-    enum Priority
+    enum
     {
         Priority_Min    = -15,
         Priority_Normal = 0,
@@ -106,8 +107,13 @@ private:
         Thread*         thread;
         ThreadFunc      userFunc;
         void*           userParam;
-        Semaphore       parentReady;
-        Semaphore       childReady;
+        Semaphore       ready;
+    };
+
+    struct UserData
+    {
+        void*           data;
+        DeinitFunc      deinitFunc;
     };
 
 public:
@@ -123,18 +129,23 @@ public:
     static void         sleep           (int millis);
     static void         yield           (void);
 
-    Priority            getPriority     (void) const;
-    void                setPriority     (Priority priority);
+    int                 getPriority     (void);
+    void                setPriority     (int priority);
     bool                isAlive         (void);
     void                join            (void);
 
-    static void         staticInit      (void);
-    static void         staticDeinit    (void);
+    void*               getUserData     (const String& id);
+    void                setUserData     (const String& id, void* data, DeinitFunc deinitFunc = NULL);
+
+    static void         suspendAll      (void); // Called by fail().
 
 private:
-    void                setCurrent      (void);
+    void                refer           (void);
+    void                unrefer         (void); // Deferred call to exited() once m_exited == true and refCount == 0.
+
     void                started         (void);
     void                exited          (void);
+
     static DWORD WINAPI threadProc      (LPVOID lpParameter);
 
 private:
@@ -142,13 +153,20 @@ private:
     Thread&             operator=       (const Thread&); // forbidden
 
 private:
-    static bool         s_inited;
-    static Spinlock*    s_lock;
-    static Hash<U32, Thread*>* s_threads;
+    static Spinlock     s_lock;
     static Thread*      s_mainThread;
+    static Hash<U32, Thread*> s_threads;
 
+    Spinlock            m_lock;
+    S32                 m_refCount;
+    bool                m_exited;
+
+    Spinlock            m_startLock;
     U32                 m_id;
     HANDLE              m_handle;
+    S32                 m_priority;
+
+    Hash<String, UserData> m_userData;
 };
 
 //------------------------------------------------------------------------

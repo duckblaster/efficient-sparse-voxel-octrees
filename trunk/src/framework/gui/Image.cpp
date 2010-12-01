@@ -41,8 +41,8 @@ const ImageFormat::StaticFormat ImageFormat::s_staticFormats[] =
     /* RGB_565 */       { 2,  3, { C16(R,11,5), C16(G,5,6), C16(B,0,5) },               GL_RGB5, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, false },
     /* RGBA_5551 */     { 2,  4, { C16(R,11,5), C16(G,6,5), C16(B,1,5), C16(A,0,1) },   GL_RGB5_A1, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, false },
 
-    /* RGB_Vec3f */     { 12, 3, { CF32(R,0), CF32(G,4), CF32(B,8) },                   GL_RGB32F_ARB, GL_RGB, GL_FLOAT, false },
-    /* RGBA_Vec4f */    { 16, 4, { CF32(R,0), CF32(G,4), CF32(B,8), CF32(A,12) },       GL_RGBA32F_ARB, GL_RGBA, GL_FLOAT, false },
+    /* RGB_Vec3f */     { 12, 3, { CF32(R,0), CF32(G,4), CF32(B,8) },                   GL_RGB32F, GL_RGB, GL_FLOAT, false },
+    /* RGBA_Vec4f */    { 16, 4, { CF32(R,0), CF32(G,4), CF32(B,8), CF32(A,12) },       GL_RGBA32F, GL_RGBA, GL_FLOAT, false },
     /* A_F32 */         { 4,  1, { CF32(A,0) },                                         GL_ALPHA32F_ARB, GL_ALPHA, GL_FLOAT, false },
 };
 
@@ -466,10 +466,7 @@ GLuint Image::createGLTexture(ImageFormat::ID desiredFormat, bool generateMipmap
     if (desiredFormat == ImageFormat::ID_Max)
         formatID = m_format.getGLFormat();
     else
-    {
-        FW_ASSERT(desiredFormat >= 0 && desiredFormat < ImageFormat::ID_Generic);
         formatID = ImageFormat(desiredFormat).getGLFormat();
-    }
 
     const ImageFormat::StaticFormat* sf = ImageFormat(formatID).getStaticFormat();
     FW_ASSERT(sf);
@@ -477,40 +474,175 @@ GLuint Image::createGLTexture(ImageFormat::ID desiredFormat, bool generateMipmap
     // Image data not usable directly => convert.
 
     Image* converted = NULL;
-    if (m_size.min() == 0)
+    const Image* img = this;
+    if (m_size.min() == 0 || m_format.getID() != formatID || m_stride != getBPP() * m_size.x)
     {
-        converted = new Image(1, formatID);
-        converted->clear();
-    }
-    else if (m_format.getID() != formatID || m_stride != getBPP() * m_size.x)
-    {
-        converted = new Image(m_size, formatID);
+        converted = new Image(max(m_size, 1), formatID);
         converted->set(*this);
+        img = converted;
     }
 
     // Create texture.
 
     GLContext::staticInit();
 
+    GLint oldTex = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &oldTex);
+
     GLuint tex = 0;
     glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, generateMipmaps);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, (generateMipmaps) ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+    // Uncomment to enable anisotropic filtering:
+//    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, FW_S32_MAX);
+
     glTexImage2D(GL_TEXTURE_2D, 0, sf->glInternalFormat,
-        (converted) ? converted->getSize().x : getSize().x,
-        (converted) ? converted->getSize().y : getSize().y,
-        0, sf->glFormat, sf->glType,
-        (converted) ? converted->getPtr() : getPtr());
+        img->getSize().x, img->getSize().y,
+        0, sf->glFormat, sf->glType, img->getPtr());
+
+    glBindTexture(GL_TEXTURE_2D, oldTex);
+    GLContext::checkErrors();
 
     // Clean up.
 
-    GLContext::checkErrors();
     delete converted;
     return tex;
+}
+
+//------------------------------------------------------------------------
+
+CUarray Image::createCudaArray(ImageFormat::ID desiredFormat) const
+{
+    // Gather format requirements.
+
+    ImageFormat refFormat = m_format;
+    if (desiredFormat != ImageFormat::ID_Max)
+        refFormat = desiredFormat;
+
+    int numChannels = min(refFormat.getNumChannels(), 4);
+    int channelBits = 0;
+    bool isFloat = false;
+    for (int i = 0; i < numChannels; i++)
+    {
+        const ImageFormat::Channel& chan = refFormat.getChannel(i);
+        channelBits = max(channelBits, chan.fieldSize);
+        isFloat = (chan.format == ImageFormat::ChannelFormat_Float);
+    }
+
+    // Select CUDA format.
+
+    CUarray_format datatype;
+    int wordSize;
+
+    if (isFloat)                datatype = CU_AD_FORMAT_FLOAT,          wordSize = 4;
+    else if (channelBits <= 8)  datatype = CU_AD_FORMAT_UNSIGNED_INT8,  wordSize = 1;
+    else if (channelBits <= 16) datatype = CU_AD_FORMAT_UNSIGNED_INT16, wordSize = 2;
+    else                        datatype = CU_AD_FORMAT_UNSIGNED_INT32, wordSize = 4;
+
+    ImageFormat cudaFormat;
+    for (int i = 0; i < numChannels; i++)
+    {
+        const ImageFormat::Channel& ref = refFormat.getChannel(i);
+        ImageFormat::Channel chan;
+
+        chan.type       = ref.type;
+        chan.format     = (isFloat) ? ImageFormat::ChannelFormat_Float : ref.format;
+        chan.wordOfs    = i * wordSize;
+        chan.wordSize   = wordSize;
+        chan.fieldOfs   = 0;
+        chan.fieldSize  = wordSize * 8;
+
+        cudaFormat.addChannel(chan);
+    }
+
+    // Image data not usable directly => convert.
+
+    Image* converted = NULL;
+    const Image* img = this;
+    if (m_size.min() == 0 || m_format != cudaFormat)
+    {
+        converted = new Image(max(m_size, 1), cudaFormat);
+        converted->set(*this);
+        img = converted;
+    }
+
+    // Create CUDA array.
+
+    CudaModule::staticInit();
+
+    CUDA_ARRAY_DESCRIPTOR arrayDesc;
+    arrayDesc.Width         = img->getSize().x;
+    arrayDesc.Height        = img->getSize().y;
+    arrayDesc.Format        = datatype;
+    arrayDesc.NumChannels   = numChannels;
+
+    CUarray cudaArray;
+    CudaModule::checkError("cuArrayCreate", cuArrayCreate(&cudaArray, &arrayDesc));
+
+    CUDA_MEMCPY2D copyDesc;
+    copyDesc.srcXInBytes    = 0;
+    copyDesc.srcY           = 0;
+    copyDesc.srcMemoryType  = CU_MEMORYTYPE_HOST;
+    copyDesc.srcHost        = img->getPtr();
+    copyDesc.srcPitch       = img->getSize().x * 4;
+    copyDesc.dstXInBytes    = 0;
+    copyDesc.dstY           = 0;
+    copyDesc.dstMemoryType  = CU_MEMORYTYPE_ARRAY;
+    copyDesc.dstArray       = cudaArray;
+    copyDesc.WidthInBytes   = img->getSize().x * 4;
+    copyDesc.Height         = img->getSize().y;
+
+    CudaModule::checkError("cuMemcpy2D", cuMemcpy2D(&copyDesc));
+
+    // Clean up.
+
+    delete converted;
+    return cudaArray;
+}
+
+//------------------------------------------------------------------------
+
+Image* Image::downscale2x(void) const
+{
+    if (m_size.x * m_size.y <= 1)
+        return NULL;
+
+    Image* res = new Image((m_size + 1) >> 1, ImageFormat::ABGR_8888);
+    Image tmp(Vec2i(m_size.x, 2), ImageFormat::ABGR_8888);
+
+    for (int y = 0; y < res->m_size.y; y++)
+    {
+        int h = min(m_size.y - y * 2, 2);
+        tmp.set(0, *this, Vec2i(0, y * 2), Vec2i(m_size.x, h));
+        U32* resPtr = (U32*)res->getMutablePtr(Vec2i(0, y));
+
+        for (int x = 0; x < res->m_size.x; x++)
+        {
+            int w = min(m_size.x - x * 2, 2);
+            const U32* tmpPtr = (const U32*)tmp.getPtr(Vec2i(x * 2, 0));
+            Vec4i val = 0;
+
+            for (int yy = 0; yy < h; yy++)
+            {
+                for (int xx = 0; xx < w; xx++)
+                {
+                    U32 t = tmpPtr[xx];
+                    val.x += t & 0xFF;
+                    val.y += (t >> 8) & 0xFF;
+                    val.z += (t >> 16) & 0xFF;
+                    val.w += t >> 24;
+                }
+                tmpPtr += m_size.x;
+            }
+
+            val = (val * 2 + w * h) >> (w + h - 1);
+            resPtr[x] = val.x | (val.y << 8) | (val.z << 16) | (val.w << 24);
+        }
+    }
+    return res;
 }
 
 //------------------------------------------------------------------------

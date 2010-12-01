@@ -55,16 +55,60 @@ BenchmarkContext::~BenchmarkContext(void)
 
 //------------------------------------------------------------------------
 
-void BenchmarkContext::load(const String& fileName, int numLevels)
+void BenchmarkContext::setFile(const String& fileName)
+{
+    // Already current => done.
+
+    if (m_file && m_file->getName() == fileName)
+        return;
+
+    // Open file.
+
+    delete m_file;
+    m_file = new OctreeFile(fileName, File::Read);
+    failIfError();
+
+    // Clear state.
+
+    m_numLevels = 0;
+    clearRuntime();
+}
+
+//------------------------------------------------------------------------
+
+void BenchmarkContext::clearRuntime(void)
+{
+    // Clear.
+
+    m_runtime->clear();
+    if (!m_file)
+        return;
+
+    // Reintroduce objects.
+
+    for (int i = 0; i < m_file->getNumObjects(); i++)
+    {
+        const OctreeFile::Object& obj = m_file->getObject(i);
+        if (obj.rootSlice == -1)
+            continue;
+
+        Array<AttachIO::AttachType> attach;
+        m_renderer->selectAttachments(attach, obj.runtimeAttachTypes);
+        m_runtime->addObject(i, obj.rootSlice, attach);
+    }
+}
+
+//------------------------------------------------------------------------
+
+void BenchmarkContext::load(int numLevels)
 {
     // Already loaded => done.
 
-    setFile(fileName);
-    if (m_numLevels == numLevels)
+    if (!m_file || m_numLevels == numLevels)
         return;
 
     clearRuntime();
-    printf("Loading %d levels from '%s'...\r", numLevels, fileName.getPtr());
+    printf("Loading %d levels from '%s'...\r", numLevels, m_file->getName().getPtr());
 
     // Queue root slices.
 
@@ -102,7 +146,7 @@ void BenchmarkContext::load(const String& fileName, int numLevels)
         {
             progress = newProgress;
             printf("Loading %d levels from '%s'... %d%%\r",
-                numLevels, fileName.getPtr(), progress);
+                numLevels, m_file->getName().getPtr(), progress);
         }
 
         if (queue[i].x >= 0)
@@ -130,7 +174,7 @@ void BenchmarkContext::load(const String& fileName, int numLevels)
 
     printf("Loaded %d levels from '%s' in %s.\n",
         numLevels,
-        fileName.getPtr(),
+        m_file->getName().getPtr(),
         formatTime(timer.getElapsed()).getPtr());
 
     printf("%s\n", m_runtime->getStats().getPtr());
@@ -245,50 +289,6 @@ BuilderBase::Params BenchmarkContext::readBuildParams(const String& stateFile)
 
     failIfError();
     return params;
-}
-
-//------------------------------------------------------------------------
-
-void BenchmarkContext::setFile(const String& fileName)
-{
-    // Already current => done.
-
-    if (m_file && m_file->getName() == fileName)
-        return;
-
-    // Open file.
-
-    delete m_file;
-    m_file = new OctreeFile(fileName, File::Read);
-    failIfError();
-
-    // Clear state.
-
-    m_numLevels = 0;
-}
-
-//------------------------------------------------------------------------
-
-void BenchmarkContext::clearRuntime(void)
-{
-    // Clear.
-
-    m_runtime->clear();
-    if (!m_file)
-        return;
-
-    // Reintroduce objects.
-
-    for (int i = 0; i < m_file->getNumObjects(); i++)
-    {
-        const OctreeFile::Object& obj = m_file->getObject(i);
-        if (obj.rootSlice == -1)
-            continue;
-
-        Array<AttachIO::AttachType> attach;
-        m_renderer->selectAttachments(attach, obj.runtimeAttachTypes);
-        m_runtime->addObject(i, obj.rootSlice, attach);
-    }
 }
 
 //------------------------------------------------------------------------

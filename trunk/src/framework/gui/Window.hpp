@@ -1,4 +1,3 @@
-#pragma once
 /*
  *  Copyright 2009-2010 NVIDIA Corporation
  *
@@ -14,7 +13,8 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
- 
+
+#pragma once
 #include "base/Array.hpp"
 #include "base/String.hpp"
 #include "base/Math.hpp"
@@ -145,6 +145,7 @@ private:
 private:
     static bool             s_inited;
     static Array<Window*>*  s_open;
+    static bool             s_ignoreRepaint;    // Prevents re-entering repaintNow() on Win32 or OpenGL failure.
 
     HWND                    m_hwnd;
     HDC                     m_hdc;

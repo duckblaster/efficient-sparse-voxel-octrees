@@ -45,7 +45,7 @@ public:
     };
 
 public:
-    explicit        Buffer              (U32 hints = Hint_None, int align = 1)  { init(0, hints, align); }
+    explicit        Buffer              (U32 hints = Hint_None)                 { init(0, hints, 1); }
     explicit        Buffer              (const void* ptr, S64 size, U32 hints = Hint_None, int align = 1) { init(size, hints, align); if (ptr) setRange(0, ptr, size); }
                     Buffer              (Buffer& other)                         { init(other.getSize(), other.getHints(), other.getAlign()); setRange(0, other, 0, other.getSize()); }
     virtual         ~Buffer             (void)                                  { deinit(); }
@@ -57,7 +57,7 @@ public:
     S64             getSize             (void) const                            { return m_size; }
     U32             getHints            (void) const                            { return m_hints; }
     int             getAlign            (void) const                            { return m_align; }
-    void            setHintsAndAlign    (U32 hints, int align);
+    void            setHintsAndAlign    (U32 hints, int align)                  { realloc(m_size, validateHints(hints, align, m_original), align); }
     void            setHints            (U32 hints)                             { setHintsAndAlign(hints, m_align); }
     void            setAlign            (int align)                             { setHintsAndAlign(m_hints, align); }
 
@@ -71,12 +71,15 @@ public:
     void            resizeDiscard       (S64 size)                              { if (m_size != size) reset(NULL, size, m_hints, m_align); }
     void            free                (Module module);
 
+    void            setRange            (S64 dstOfs, const void* src, S64 size, bool async = false, CUstream cudaStream = NULL);
+    void            setRange            (S64 dstOfs, Buffer& src, S64 srcOfs, S64 size, bool async = false, CUstream cudaStream = NULL);
+    void            clearRange          (S64 dstOfs, int value, S64 size, bool async = false, CUstream cudaStream = NULL);
+    void            getRange            (void* dst, S64 srcOfs, S64 size, bool async = false, CUstream cudaStream = NULL) const;
+
     void            set                 (const void* ptr, S64 size)             { resize(size); setRange(0, ptr, size); }
     void            set                 (Buffer& other)                         { if (&other != this) { resize(other.getSize()); setRange(0, other, 0, other.getSize()); } }
+    void            clear               (int value = 0)                         { clearRange(0, value, m_size); }
 
-    void            setRange            (S64 dstOfs, const void* src, S64 size, bool async = false, CUstream cudaStream = NULL);
-    void            getRange            (void* dst, S64 srcOfs, S64 size, bool async = false, CUstream cudaStream = NULL) const;
-    void            setRange            (S64 dstOfs, Buffer& src, S64 srcOfs, S64 size, bool async = false, CUstream cudaStream = NULL);
     void            setOwner            (Module module, bool modify, bool async = false, CUstream cudaStream = NULL, S64 validSize = -1);
     Module          getOwner            (void) const                            { return m_owner; }
 
@@ -98,6 +101,8 @@ public:
     static void     memcpyDtoD          (CUdeviceptr dst, CUdeviceptr src, S64 size, bool async = false, CUstream cudaStream = NULL) { memcpyXtoX(NULL, dst, NULL, src, size, async, cudaStream); }
 
 private:
+    static U32      validateHints       (U32 hints, int align, Module original);
+
     void            init                (S64 size, U32 hints, int align);
     void            deinit              (void);
     void            wrap                (Module module, S64 size);

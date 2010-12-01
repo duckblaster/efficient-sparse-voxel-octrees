@@ -1,5 +1,5 @@
 
-Efficient Sparse Voxel Octrees 1.0
+Efficient Sparse Voxel Octrees 1.1
 ----------------------------------
 
 This package contains a proof-of-concept implementation of the voxel
@@ -24,23 +24,23 @@ A discussion forum is also available.
 System requirements
 -------------------
 
-- Microsoft Windows XP or Windows Vista. 64-bit version is recommended to
-  avoid running out of virtual address space when operating on large scenes.
+- Microsoft Windows XP, Vista, or 7. 64-bit version is recommended to avoid
+  running out of virtual address space when operating on large scenes.
 
 - At least 2 gigabytes of system memory.
 
 - NVIDIA CUDA-compatible GPU with compute capability 1.1 and at least 256
   megabytes of DRAM. Quadro FX 5800 is recommended.
 
-- Microsoft Visual Studio 2005 or 2008. Required even if you do not plan to
-  build the source code, as the CUDA Toolkit depends on it.
+- Microsoft Visual Studio 2008. Required even if you do not plan to build
+  the source code, as the CUDA Toolkit depends on it.
 
 
 Instructions
 ------------
 
-1. Install the latest GPU drivers and NVIDIA CUDA Toolkit.
-   http://developer.nvidia.com/object/cuda_2_3_downloads.html
+1. Install the latest NVIDIA GPU drivers and CUDA Toolkit.
+   http://developer.nvidia.com/object/cuda_archive.html
 
 2. Run octree.exe to start the application in interactive mode. The first run
    will execute a number of initialization tasks, including compilation of 24
@@ -57,12 +57,12 @@ Instructions
      "set CUDA_INC_PATH=C:\CUDA\include".
 
    - Run vcvars32.bat to setup Visual Studio paths, e.g.
-     "C:\Program Files\Microsoft Visual Studio 8\VC\bin\vcvars32.bat".
+     "C:\Program Files\Microsoft Visual Studio 9.0\VC\bin\vcvars32.bat".
 
 4. Run "octree --help" to see a list of command-line options.
 
-5. Optional: If you are running on Windows Vista, the next step may exceed
-   the default GPU driver recovery timeout of 2 seconds. To avoid
+5. Optional: If you are running on Windows Vista or 7, the next step may
+   exceed the default GPU driver recovery timeout of 2 seconds. To avoid
    difficulties, you should increase the timeout to at least 10 seconds.
 
    - Launch regedit.exe.
@@ -76,6 +76,8 @@ Instructions
    considerable amount of disk space, they must be built separately. The
    process takes quite long to complete, so you may want to let it run
    overnight.
+   
+   The necessary mesh files are distributed in a separate package.
 
    If you have a GPU with 2 gigabytes of DRAM or more, run
    build_and_benchmark_2gb.cmd. The script will create the following files:
@@ -104,9 +106,7 @@ Instructions
 
 7. Optional: Build the application yourself.
 
-   - Open octree.sln in Visual Studio.
-   - If you are using Visual Studio 2008, you will be prompted to convert
-     the project. Just click "Finish".
+   - Open octree.sln in Visual Studio 2008.
    - Right-click the "octree" project and select "Set as StartUp Project".
    - Select Release build. Debug build is very slow, especially when
      constructing octrees.
@@ -151,8 +151,29 @@ files:
 - Optimize: Defragment an octree file and remove builder internal data.
 
 
+Version history
+---------------
+
+Version 1.1, Dec 01, 2010
+- Update the codebase to support CUDA 3.2.
+- Minor stability improvements.
+
+Version 1.0, Feb 17, 2010
+- Initial release.
+
+
 Known issues
 ------------
+
+- When using CUDA 3.2 or later, the performance of device-side code drops
+  slightly in 64-bit builds. This is because CUDA 3.2 disallows "mixed-bitness
+  mode", which we utilize on earlier CUDA versions to get maximum performance.
+  With CUDA 3.2, we must always compile device code with the same bitness
+  as host code, which generally results in higher register pressure in 64-bit
+  builds.
+  
+  For more information, see:
+  http://developer.download.nvidia.com/compute/cuda/3_2_prod/toolkit/docs/CUDA_3.2_Readiness_Tech_Brief.pdf
 
 - The support for mesh and image formats is very limited. In particular, only
   Wavefront OBJ meshes and truecolor TGA/TIFF textures are supported. If you

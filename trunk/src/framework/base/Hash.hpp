@@ -177,107 +177,102 @@ inline bool                         equalsBuffer    (const void* ptrA, int sizeA
 U32                                 hashBuffer      (const void* ptr, int size);
 U32                                 hashBufferAlign (const void* ptr, int size);
 
-template <class T> bool             equalsArray     (const T* ptrA, int sizeA, const T* ptrB, int sizeB);
-template <class T> bool             equalsArray     (const S8* ptrA, int sizeA, const S8* ptrB, int sizeB)      { return equalsBuffer(ptrA, sizeA * (int)sizeof(S8), ptrB, sizeB * (int)sizeof(S8)); }
-template <class T> bool             equalsArray     (const U8* ptrA, int sizeA, const U8* ptrB, int sizeB)      { return equalsBuffer(ptrA, sizeA * (int)sizeof(U8), ptrB, sizeB * (int)sizeof(U8)); }
-template <class T> bool             equalsArray     (const S16* ptrA, int sizeA, const S16* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(S16), ptrB, sizeB * (int)sizeof(S16)); }
-template <class T> bool             equalsArray     (const U16* ptrA, int sizeA, const U16* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(U16), ptrB, sizeB * (int)sizeof(U16)); }
-template <class T> bool             equalsArray     (const S32* ptrA, int sizeA, const S32* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(S32), ptrB, sizeB * (int)sizeof(S32)); }
-template <class T> bool             equalsArray     (const U32* ptrA, int sizeA, const U32* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(U32), ptrB, sizeB * (int)sizeof(U32)); }
-template <class T> bool             equalsArray     (const F32* ptrA, int sizeA, const F32* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(F32), ptrB, sizeB * (int)sizeof(F32)); }
-template <class T> bool             equalsArray     (const S64* ptrA, int sizeA, const S64* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(S64), ptrB, sizeB * (int)sizeof(S64)); }
-template <class T> bool             equalsArray     (const U64* ptrA, int sizeA, const U64* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(U64), ptrB, sizeB * (int)sizeof(U64)); }
-template <class T> bool             equalsArray     (const F64* ptrA, int sizeA, const F64* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(F64), ptrB, sizeB * (int)sizeof(F64)); }
-
-template <class T> U32              hashArray       (const T* ptr, int size);
-template <class T> U32              hashArray       (const S8* ptr, int size)                                   { return hashBuffer(ptr, size * (int)sizeof(S8)); }
-template <class T> U32              hashArray       (const U8* ptr, int size)                                   { return hashBuffer(ptr, size * (int)sizeof(U8)); }
-template <class T> U32              hashArray       (const S16* ptr, int size)                                  { return hashBuffer(ptr, size * (int)sizeof(S16)); }
-template <class T> U32              hashArray       (const U16* ptr, int size)                                  { return hashBuffer(ptr, size * (int)sizeof(U16)); }
-template <class T> U32              hashArray       (const S32* ptr, int size)                                  { return hashBuffer(ptr, size * (int)sizeof(S32)); }
-template <class T> U32              hashArray       (const U32* ptr, int size)                                  { return hashBuffer(ptr, size * (int)sizeof(U32)); }
-template <class T> U32              hashArray       (const F32* ptr, int size)                                  { return hashBuffer(ptr, size * (int)sizeof(F32)); }
-template <class T> U32              hashArray       (const S64* ptr, int size)                                  { return hashBuffer(ptr, size * (int)sizeof(S64)); }
-template <class T> U32              hashArray       (const U64* ptr, int size)                                  { return hashBuffer(ptr, size * (int)sizeof(U64)); }
-template <class T> U32              hashArray       (const F64* ptr, int size)                                  { return hashBuffer(ptr, size * (int)sizeof(F64)); }
-
 //------------------------------------------------------------------------
-// Generic types.
+// Base templates.
 //------------------------------------------------------------------------
 
-template <class T> bool             equals          (const T& a, const T& b)                                    { return equalsBuffer(&a, &b, sizeof(T)); }
-template <class T> U32              hash            (const T& value)                                            { return hashBuffer(&value, sizeof(T)); }
+template <class T>  inline bool equalsArray     (const T* ptrA, int sizeA, const T* ptrB, int sizeB);
+template <class T>  inline U32  hashArray       (const T* ptr, int size);
 
-template <class T, class K, class V> bool equals    (const HashEntry<K, V>& a, const HashEntry<K, V>& b)        { return equals<K>(a.key, b.key); }
-template <class T, class K, class V> U32 hash       (const HashEntry<K, V>& value)                              { return hash<K>(value.key); }
-
-//------------------------------------------------------------------------
-// Primitive types.
-//------------------------------------------------------------------------
-
-template <class T, class I> bool    equals          (I* a, I* b)                                                { return (a == b); }
-template <class T> bool             equals          (S8 a, S8 b)                                                { return (a == b); }
-template <class T> bool             equals          (U8 a, U8 b)                                                { return (a == b); }
-template <class T> bool             equals          (S16 a, S16 b)                                              { return (a == b); }
-template <class T> bool             equals          (U16 a, U16 b)                                              { return (a == b); }
-template <class T> bool             equals          (S32 a, S32 b)                                              { return (a == b); }
-template <class T> bool             equals          (U32 a, U32 b)                                              { return (a == b); }
-template <class T> bool             equals          (F32 a, F32 b)                                              { return (floatToBits(a) == floatToBits(b)); }
-template <class T> bool             equals          (S64 a, S64 b)                                              { return (a == b); }
-template <class T> bool             equals          (U64 a, U64 b)                                              { return (a == b); }
-template <class T> bool             equals          (F64 a, F64 b)                                              { return (doubleToBits(a) == doubleToBits(b)); }
-
-template <class T, class I> U32     hash            (I* value)                                                  { return hashBits((U32)(UPTR)value); }
-template <class T> U32              hash            (S8 value)                                                  { return hashBits(value); }
-template <class T> U32              hash            (U8 value)                                                  { return hashBits(value); }
-template <class T> U32              hash            (S16 value)                                                 { return hashBits(value); }
-template <class T> U32              hash            (U16 value)                                                 { return hashBits(value); }
-template <class T> U32              hash            (S32 value)                                                 { return hashBits(value); }
-template <class T> U32              hash            (U32 value)                                                 { return hashBits(value); }
-template <class T> U32              hash            (F32 value)                                                 { return hashBits(floatToBits(value)); }
-template <class T> U32              hash            (S64 value)                                                 { return hash<U64>((U64)value); }
-template <class T> U32              hash            (U64 value)                                                 { return hashBits((U32)value, (U32)(value >> 32)); }
-template <class T> U32              hash            (F64 value)                                                 { return hash<U64>(doubleToBits(value)); }
+template <class T>  inline bool equals          (const T& a, const T& b)                { return equalsBuffer(&a, &b, sizeof(T)); }
+template <class T>  inline U32  hash            (const T& value)                        { return hashBuffer(&value, sizeof(T)); }
 
 //------------------------------------------------------------------------
-// Vectors.
+// Specializations for primitive types.
 //------------------------------------------------------------------------
 
-template <class T> bool             equals          (const Vec2i& a, const Vec2i& b)                            { return (a == b); }
-template <class T> bool             equals          (const Vec2f& a, const Vec2f& b)                            { return (equals<F32>(a.x, b.x) && equals<F32>(a.y, b.y)); }
-template <class T> bool             equals          (const Vec3i& a, const Vec3i& b)                            { return (a == b); }
-template <class T> bool             equals          (const Vec3f& a, const Vec3f& b)                            { return (equals<F32>(a.x, b.x) && equals<F32>(a.y, b.y) && equals<F32>(a.z, b.z)); }
-template <class T> bool             equals          (const Vec4i& a, const Vec4i& b)                            { return (a == b); }
-template <class T> bool             equals          (const Vec4f& a, const Vec4f& b)                            { return (equals<F32>(a.x, b.x) && equals<F32>(a.y, b.y) && equals<F32>(a.z, b.z) && equals<F32>(a.w, b.w)); }
+template <> inline bool equalsArray<S8> (const S8* ptrA, int sizeA, const S8* ptrB, int sizeB)      { return equalsBuffer(ptrA, sizeA * (int)sizeof(S8), ptrB, sizeB * (int)sizeof(S8)); }
+template <> inline bool equalsArray<U8> (const U8* ptrA, int sizeA, const U8* ptrB, int sizeB)      { return equalsBuffer(ptrA, sizeA * (int)sizeof(U8), ptrB, sizeB * (int)sizeof(U8)); }
+template <> inline bool equalsArray<S16>(const S16* ptrA, int sizeA, const S16* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(S16), ptrB, sizeB * (int)sizeof(S16)); }
+template <> inline bool equalsArray<U16>(const U16* ptrA, int sizeA, const U16* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(U16), ptrB, sizeB * (int)sizeof(U16)); }
+template <> inline bool equalsArray<S32>(const S32* ptrA, int sizeA, const S32* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(S32), ptrB, sizeB * (int)sizeof(S32)); }
+template <> inline bool equalsArray<U32>(const U32* ptrA, int sizeA, const U32* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(U32), ptrB, sizeB * (int)sizeof(U32)); }
+template <> inline bool equalsArray<F32>(const F32* ptrA, int sizeA, const F32* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(F32), ptrB, sizeB * (int)sizeof(F32)); }
+template <> inline bool equalsArray<S64>(const S64* ptrA, int sizeA, const S64* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(S64), ptrB, sizeB * (int)sizeof(S64)); }
+template <> inline bool equalsArray<U64>(const U64* ptrA, int sizeA, const U64* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(U64), ptrB, sizeB * (int)sizeof(U64)); }
+template <> inline bool equalsArray<F64>(const F64* ptrA, int sizeA, const F64* ptrB, int sizeB)    { return equalsBuffer(ptrA, sizeA * (int)sizeof(F64), ptrB, sizeB * (int)sizeof(F64)); }
 
-template <class T> U32              hash            (const Vec2i& value)                                        { return hashBits(value.x, value.y); }
-template <class T> U32              hash            (const Vec2f& value)                                        { return hashBits(floatToBits(value.x), floatToBits(value.y)); }
-template <class T> U32              hash            (const Vec3i& value)                                        { return hashBits(value.x, value.y, value.z); }
-template <class T> U32              hash            (const Vec3f& value)                                        { return hashBits(floatToBits(value.x), floatToBits(value.y), floatToBits(value.z)); }
-template <class T> U32              hash            (const Vec4i& value)                                        { return hashBits(value.x, value.y, value.z, value.w); }
-template <class T> U32              hash            (const Vec4f& value)                                        { return hashBits(floatToBits(value.x), floatToBits(value.y), floatToBits(value.z), floatToBits(value.w)); }
+template <> inline U32  hashArray<S8>   (const S8* ptr, int size)           { return hashBuffer(ptr, size * (int)sizeof(S8)); }
+template <> inline U32  hashArray<U8>   (const U8* ptr, int size)           { return hashBuffer(ptr, size * (int)sizeof(U8)); }
+template <> inline U32  hashArray<S16>  (const S16* ptr, int size)          { return hashBuffer(ptr, size * (int)sizeof(S16)); }
+template <> inline U32  hashArray<U16>  (const U16* ptr, int size)          { return hashBuffer(ptr, size * (int)sizeof(U16)); }
+template <> inline U32  hashArray<S32>  (const S32* ptr, int size)          { return hashBuffer(ptr, size * (int)sizeof(S32)); }
+template <> inline U32  hashArray<U32>  (const U32* ptr, int size)          { return hashBuffer(ptr, size * (int)sizeof(U32)); }
+template <> inline U32  hashArray<F32>  (const F32* ptr, int size)          { return hashBuffer(ptr, size * (int)sizeof(F32)); }
+template <> inline U32  hashArray<S64>  (const S64* ptr, int size)          { return hashBuffer(ptr, size * (int)sizeof(S64)); }
+template <> inline U32  hashArray<U64>  (const U64* ptr, int size)          { return hashBuffer(ptr, size * (int)sizeof(U64)); }
+template <> inline U32  hashArray<F64>  (const F64* ptr, int size)          { return hashBuffer(ptr, size * (int)sizeof(F64)); }
+
+template <> inline bool equals<S8>      (const S8& a, const S8& b)          { return (a == b); }
+template <> inline bool equals<U8>      (const U8& a, const U8& b)          { return (a == b); }
+template <> inline bool equals<S16>     (const S16& a, const S16& b)        { return (a == b); }
+template <> inline bool equals<U16>     (const U16& a, const U16& b)        { return (a == b); }
+template <> inline bool equals<S32>     (const S32& a, const S32& b)        { return (a == b); }
+template <> inline bool equals<U32>     (const U32& a, const U32& b)        { return (a == b); }
+template <> inline bool equals<F32>     (const F32& a, const F32& b)        { return (floatToBits(a) == floatToBits(b)); }
+template <> inline bool equals<S64>     (const S64& a, const S64& b)        { return (a == b); }
+template <> inline bool equals<U64>     (const U64& a, const U64& b)        { return (a == b); }
+template <> inline bool equals<F64>     (const F64& a, const F64& b)        { return (doubleToBits(a) == doubleToBits(b)); }
+
+template <> inline U32  hash<S8>        (const S8& value)                   { return hashBits(value); }
+template <> inline U32  hash<U8>        (const U8& value)                   { return hashBits(value); }
+template <> inline U32  hash<S16>       (const S16& value)                  { return hashBits(value); }
+template <> inline U32  hash<U16>       (const U16& value)                  { return hashBits(value); }
+template <> inline U32  hash<S32>       (const S32& value)                  { return hashBits(value); }
+template <> inline U32  hash<U32>       (const U32& value)                  { return hashBits(value); }
+template <> inline U32  hash<F32>       (const F32& value)                  { return hashBits(floatToBits(value)); }
+template <> inline U32  hash<S64>       (const S64& value)                  { return hashBits((U32)value, (U32)(value >> 32)); }
+template <> inline U32  hash<U64>       (const U64& value)                  { return hash<S64>((S64)value); }
+template <> inline U32  hash<F64>       (const F64& value)                  { return hash<U64>(doubleToBits(value)); }
 
 //------------------------------------------------------------------------
-// Matrices.
+// Specializations for compound types.
 //------------------------------------------------------------------------
 
-template <class T> bool             equals          (const Mat2f& a, const Mat2f& b)                            { return equalsBuffer(&a, &b, sizeof(a)); }
-template <class T> bool             equals          (const Mat3f& a, const Mat3f& b)                            { return equalsBuffer(&a, &b, sizeof(a)); }
-template <class T> bool             equals          (const Mat4f& a, const Mat4f& b)                            { return equalsBuffer(&a, &b, sizeof(a)); }
+template <> inline bool equals<Vec2i>   (const Vec2i& a, const Vec2i& b)    { return (a == b); }
+template <> inline bool equals<Vec2f>   (const Vec2f& a, const Vec2f& b)    { return (equals<F32>(a.x, b.x) && equals<F32>(a.y, b.y)); }
+template <> inline bool equals<Vec3i>   (const Vec3i& a, const Vec3i& b)    { return (a == b); }
+template <> inline bool equals<Vec3f>   (const Vec3f& a, const Vec3f& b)    { return (equals<F32>(a.x, b.x) && equals<F32>(a.y, b.y) && equals<F32>(a.z, b.z)); }
+template <> inline bool equals<Vec4i>   (const Vec4i& a, const Vec4i& b)    { return (a == b); }
+template <> inline bool equals<Vec4f>   (const Vec4f& a, const Vec4f& b)    { return (equals<F32>(a.x, b.x) && equals<F32>(a.y, b.y) && equals<F32>(a.z, b.z) && equals<F32>(a.w, b.w)); }
+template <> inline bool equals<Mat2f>   (const Mat2f& a, const Mat2f& b)    { return equalsBuffer(&a, &b, sizeof(a)); }
+template <> inline bool equals<Mat3f>   (const Mat3f& a, const Mat3f& b)    { return equalsBuffer(&a, &b, sizeof(a)); }
+template <> inline bool equals<Mat4f>   (const Mat4f& a, const Mat4f& b)    { return equalsBuffer(&a, &b, sizeof(a)); }
+template <> inline bool equals<String>  (const String& a, const String& b)  { return equalsBuffer(a.getPtr(), a.getLength(), b.getPtr(), b.getLength()); }
 
-template <class T> U32              hash            (const Mat2f& value)                                        { return hashBufferAlign(&value, sizeof(value)); }
-template <class T> U32              hash            (const Mat3f& value)                                        { return hashBufferAlign(&value, sizeof(value)); }
-template <class T> U32              hash            (const Mat4f& value)                                        { return hashBufferAlign(&value, sizeof(value)); }
+template <> inline U32  hash<Vec2i>     (const Vec2i& value)                { return hashBits(value.x, value.y); }
+template <> inline U32  hash<Vec2f>     (const Vec2f& value)                { return hashBits(floatToBits(value.x), floatToBits(value.y)); }
+template <> inline U32  hash<Vec3i>     (const Vec3i& value)                { return hashBits(value.x, value.y, value.z); }
+template <> inline U32  hash<Vec3f>     (const Vec3f& value)                { return hashBits(floatToBits(value.x), floatToBits(value.y), floatToBits(value.z)); }
+template <> inline U32  hash<Vec4i>     (const Vec4i& value)                { return hashBits(value.x, value.y, value.z, value.w); }
+template <> inline U32  hash<Vec4f>     (const Vec4f& value)                { return hashBits(floatToBits(value.x), floatToBits(value.y), floatToBits(value.z), floatToBits(value.w)); }
+template <> inline U32  hash<Mat2f>     (const Mat2f& value)                { return hashBufferAlign(&value, sizeof(value)); }
+template <> inline U32  hash<Mat3f>     (const Mat3f& value)                { return hashBufferAlign(&value, sizeof(value)); }
+template <> inline U32  hash<Mat4f>     (const Mat4f& value)                { return hashBufferAlign(&value, sizeof(value)); }
+template <> inline U32  hash<String>    (const String& value)               { return hashBuffer(value.getPtr(), value.getLength()); }
 
 //------------------------------------------------------------------------
-// Array and String.
+// Partial specializations.
 //------------------------------------------------------------------------
 
-template <class T, class I> bool    equals          (const Array<I>& a, const Array<I>& b)                      { return equalsArray<I>(a.getPtr(), a.getSize(), b.getPtr(), b.getSize()); }
-template <class T, class I> U32     hash            (const Array<I>& value)                                     { return hashArray<I>(value.getPtr(), value.getSize()); }
+template <class T, class TT> inline bool equals(TT* const& a, TT* const& b) { return (a == b); }
+template <class T, class TT> inline U32 hash(TT* const& value) { return hashBits((U32)(UPTR)value); }
 
-template <class T> bool             equals          (const String& a, const String& b)                          { return equalsBuffer(a.getPtr(), a.getLength(), b.getPtr(), b.getLength()); }
-template <class T> U32              hash            (const String& value)                                       { return hashBuffer(value.getPtr(), value.getLength()); }
+template <class T, class K, class V> inline bool equals(const HashEntry<K, V>& a, const HashEntry<K, V>& b) { return equals<K>(a.key, b.key); }
+template <class T, class K, class V> inline U32 hash (const HashEntry<K, V>& value) { return hash<K>(value.key); }
+
+template <class T, class TT> inline bool equals(const Array<TT>& a, const Array<TT>& b) { return equalsArray<T>(a.getPtr(), a.getSize(), b.getPtr(), b.getSize()); }
+template <class T, class TT> inline U32  hash(const Array<TT>& value) { return hashArray<T>(value.getPtr(), value.getSize()); }
 
 //------------------------------------------------------------------------
 // GenericHashKey.
@@ -293,9 +288,11 @@ struct GenericHashKey
     template <class T> GenericHashKey(const T* p) : ptr(p), size(sizeof(T)) { FW_ASSERT(p); }
 };
 
-template <class T> bool             equals          (const GenericHashKey& a, const GenericHashKey& b)          { return equalsBuffer(a.ptr, a.size, b.ptr, b.size); }
-template <class T> U32              hash            (const GenericHashKey& value)                               { return hashBuffer(value.ptr, value.size); }
+template <> inline bool equals<GenericHashKey>(const GenericHashKey& a, const GenericHashKey& b) { return equalsBuffer(a.ptr, a.size, b.ptr, b.size); }
+template <> inline U32 hash<GenericHashKey>(const GenericHashKey& value) { return hashBuffer(value.ptr, value.size); }
 
+//------------------------------------------------------------------------
+// Implementation.
 //------------------------------------------------------------------------
 
 template <class T> void Set<T>::setCapacity(int numItems)

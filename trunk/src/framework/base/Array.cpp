@@ -1,4 +1,3 @@
-#include "base/Array.hpp"
 /*
  *  Copyright 2009-2010 NVIDIA Corporation
  *
@@ -14,7 +13,8 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
- 
+
+#include "base/Array.hpp"
 
 using namespace FW;
 
