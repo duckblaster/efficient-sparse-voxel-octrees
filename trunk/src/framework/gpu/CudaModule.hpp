@@ -36,7 +36,7 @@ public:
 
     Buffer&             getGlobal           (const String& name);
     void                updateGlobals       (bool async = false, CUstream stream = NULL); // copy to the device if modified
-
+    
     CUfunction          getKernel           (const String& name, int paramSize = 0);
     int                 setParami           (CUfunction kernel, int offset, S32 value); // returns sizeof(value)
     int                 setParamf           (CUfunction kernel, int offset, F32 value);
@@ -48,6 +48,9 @@ public:
     void                setTexRef           (const String& name, CUarray cudaArray, bool wrap = true, bool bilinear = true, bool normalizedCoords = true, bool readAsInt = false);
     void                unsetTexRef         (const String& name);
     void                updateTexRefs       (CUfunction kernel);
+
+    CUsurfref           getSurfRef          (const String& name);
+    void                setSurfRef          (const String& name, CUarray cudaArray);
 
     void                launchKernel        (CUfunction kernel, const Vec2i& blockSize, const Vec2i& gridSize, bool async = false, CUstream stream = NULL);
     F32                 launchKernelTimed   (CUfunction kernel, const Vec2i& blockSize, const Vec2i& gridSize, bool async = false, CUstream stream = NULL, bool yield = true);

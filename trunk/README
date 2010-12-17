@@ -1,5 +1,5 @@
 
-Efficient Sparse Voxel Octrees 1.1
+Efficient Sparse Voxel Octrees 1.2
 ----------------------------------
 
 This package contains a proof-of-concept implementation of the voxel
@@ -153,6 +153,9 @@ files:
 
 Version history
 ---------------
+
+Version 1.2, Dec 17, 2010
+- Fix issues with nvcc path autodetection with CUDA 3.2.
 
 Version 1.1, Dec 01, 2010
 - Upgrade project files to Visual Studio 2008.

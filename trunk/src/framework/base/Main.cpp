@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
     GLContext::staticDeinit();
     Window::staticDeinit();
     deinitDLLImports();
-    profileEnd();
+    profileEnd(false);
     failIfError();
 
     while (hasLogFile())

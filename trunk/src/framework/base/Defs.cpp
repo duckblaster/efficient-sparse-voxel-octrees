@@ -358,15 +358,15 @@ void FW::popLogFile(void)
     s_lock.enter();
     if (s_logFiles.getSize())
     {
-    s_logStreams.getLast()->flush();
-    delete s_logFiles.removeLast();
-    delete s_logStreams.removeLast();
-    if (!s_logFiles.getSize())
-    {
-        s_logFiles.reset();
-        s_logStreams.reset();
+        s_logStreams.getLast()->flush();
+        delete s_logFiles.removeLast();
+        delete s_logStreams.removeLast();
+        if (!s_logFiles.getSize())
+        {
+            s_logFiles.reset();
+            s_logStreams.reset();
+        }
     }
-}
     s_lock.leave();
 }
 
@@ -551,7 +551,7 @@ void FW::profilePush(const char* id)
 
 void FW::profilePop(void)
 {
-    if (!s_profileStarted)
+    if (!s_profileStarted || s_profileStack.getSize() == 0)
         return;
     if (!Thread::isMain())
         fail("profilePop() can only be used in the main thread!");
@@ -565,7 +565,7 @@ void FW::profilePop(void)
 
 //------------------------------------------------------------------------
 
-void FW::profileEnd(void)
+void FW::profileEnd(bool printResults)
 {
     if (!Thread::isMain())
         fail("profileEnd() can only be used in the main thread!");
@@ -579,6 +579,8 @@ void FW::profileEnd(void)
 
     // Recurse and print.
 
+    if (printResults)
+    {
     printf("\n");
     Array<Vec2i> stack(Vec2i(0, 0));
     while (stack.getSize())
@@ -596,6 +598,7 @@ void FW::profileEnd(void)
         printf("%.0f%%\n", timer.timer.getTotal() / s_profileTimers[0].timer.getTotal() * 100.0f);
     }
     printf("\n");
+    }
 
     // Clean up.
 

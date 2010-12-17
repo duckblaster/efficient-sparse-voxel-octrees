@@ -199,10 +199,14 @@ void CudaCompiler::staticInit(void)
     {
         cudaBinList.add(cudaBinEnv);
         splitPathList(cudaBinList, pathEnv);
-        cudaBinList.add("C:\\CUDA\\bin");
-        cudaBinList.add("C:\\CUDA\\bin64");
-        cudaBinList.add("D:\\CUDA\\bin");
-        cudaBinList.add("D:\\CUDA\\bin64");
+
+		F32 version = CudaModule::getDriverVersion() / 10.0f;
+		for (char drive = 'C'; drive <= 'E'; drive++)
+		{
+			cudaBinList.add(sprintf("%c:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v%.1f\\bin", drive, version));
+			cudaBinList.add(sprintf("%c:\\CUDA\\bin", drive));
+			cudaBinList.add(sprintf("%c:\\CUDA\\bin64", drive));
+    }
     }
 
     String cudaBinPath;
@@ -213,7 +217,7 @@ void CudaCompiler::staticInit(void)
 
         // Execute "nvcc --version".
 
-        FILE* pipe = _popen(sprintf("%s\\nvcc.exe --version 2>nul", cudaBinList[i].getPtr()).getPtr(), "rt");
+        FILE* pipe = _popen(sprintf("\"%s\\nvcc.exe\" --version 2>nul", cudaBinList[i].getPtr()).getPtr(), "rt");
         if (!pipe)
             continue;
 
@@ -568,9 +572,9 @@ void CudaCompiler::runPreprocessor(String& cubinFile, String& finalOpts)
     if (!smArch)
         smArch = CudaModule::getComputeCapability();
 
-        finalOpts = removeOption(finalOpts, "-arch", true);
-        finalOpts = removeOption(finalOpts, "--gpu-architecture", true);
-        finalOpts += sprintf("-arch sm_%d ", smArch);
+    finalOpts = removeOption(finalOpts, "-arch", true);
+    finalOpts = removeOption(finalOpts, "--gpu-architecture", true);
+    finalOpts += sprintf("-arch sm_%d ", smArch);
 
     // Override pointer width.
     // CUDA 3.2 => requires -m32 for x86 build and -m64 for x64 build.

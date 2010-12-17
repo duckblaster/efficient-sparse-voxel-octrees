@@ -197,6 +197,34 @@ void CudaModule::updateTexRefs(CUfunction kernel)
 
 //------------------------------------------------------------------------
 
+CUsurfref CudaModule::getSurfRef(const String& name)
+{
+#if (CUDA_VERSION >= 3010)
+    CUsurfref surfRef;
+    checkError("cuModuleGetSurfRef", cuModuleGetSurfRef(&surfRef, m_module, name.getPtr()));
+    return surfRef;
+#else
+    FW_UNREF(name);
+    fail("CudaModule: getSurfRef() requires CUDA 3.1 or later!");
+    return NULL;
+#endif
+}
+
+//------------------------------------------------------------------------
+
+void CudaModule::setSurfRef(const String& name, CUarray cudaArray)
+{
+#if (CUDA_VERSION >= 3010)
+    checkError("cuSurfRefSetArray", cuSurfRefSetArray(getSurfRef(name), cudaArray, 0));
+#else
+    FW_UNREF(name);
+    FW_UNREF(cudaArray);
+    fail("CudaModule: setSurfRef() requires CUDA 3.1 or later!");
+#endif
+}
+
+//------------------------------------------------------------------------
+
 void CudaModule::launchKernel(CUfunction kernel, const Vec2i& blockSize, const Vec2i& gridSize, bool async, CUstream stream)
 {
     if (!kernel)
