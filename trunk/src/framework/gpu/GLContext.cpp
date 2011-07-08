@@ -95,63 +95,7 @@ void GLContext::Program::use(void)
 
 //------------------------------------------------------------------------
 
-void GLContext::Program::init(
-    const String& vertexSource,
-    GLenum geomInputType, GLenum geomOutputType, int geomVerticesOut, const String& geometrySource,
-    const String& fragmentSource)
-{
-    GLContext::staticInit();
-    m_glProgram = glCreateProgram();
-
-    // Setup vertex shader.
-
-    m_glVertexShader = createShader(GL_VERTEX_SHADER, vertexSource);
-    glAttachShader(m_glProgram, m_glVertexShader);
-
-    // Setup geometry shader (GL_ARB_geometry_shader4).
-
-    if (geometrySource.getLength() == 0)
-        m_glGeometryShader = 0;
-    else
-    {
-        m_glGeometryShader = createShader(GL_GEOMETRY_SHADER_ARB, geometrySource);
-        glAttachShader(m_glProgram, m_glGeometryShader);
-
-        if (!GL_FUNC_AVAILABLE(glProgramParameteriARB))
-            fail("glProgramParameteriARB() not available!");
-        glProgramParameteriARB(m_glProgram, GL_GEOMETRY_INPUT_TYPE_ARB, geomInputType);
-        glProgramParameteriARB(m_glProgram, GL_GEOMETRY_OUTPUT_TYPE_ARB, geomOutputType);
-        glProgramParameteriARB(m_glProgram, GL_GEOMETRY_VERTICES_OUT_ARB, geomVerticesOut);
-    }
-
-    // Setup fragment shader.
-
-    m_glFragmentShader = createShader(GL_FRAGMENT_SHADER, fragmentSource);
-    glAttachShader(m_glProgram, m_glFragmentShader);
-
-    // Link and display errors.
-
-    glLinkProgram(m_glProgram);
-    GLint status = 0;
-    glGetProgramiv(m_glProgram, GL_LINK_STATUS, &status);
-    if (!status)
-    {
-        GLint infoLen = 0;
-        glGetProgramiv(m_glProgram, GL_INFO_LOG_LENGTH, &infoLen);
-        if (!infoLen)
-            fail("glLinkProgram() failed!");
-
-        Array<char> info(NULL, infoLen);
-        info[0] = '\0';
-        glGetProgramInfoLog(m_glProgram, infoLen, &infoLen, info.getPtr());
-        fail("glLinkProgram() failed!\n\n%s", info.getPtr());
-    }
-    GLContext::checkErrors();
-}
-
-//------------------------------------------------------------------------
-
-GLuint GLContext::Program::createShader(GLenum type, const String& source)
+GLuint GLContext::Program::createGLShader(GLenum type, const String& typeStr, const String& source)
 {
     GLuint shader = glCreateShader(type);
     const char* sourcePtr = source.getPtr();
@@ -163,28 +107,82 @@ GLuint GLContext::Program::createShader(GLenum type, const String& source)
     glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
     if (!status)
     {
-        const char* typeStr;
-        switch (type)
-        {
-        case GL_VERTEX_SHADER:          typeStr = "GL_VERTEX_SHADER"; break;
-        case GL_GEOMETRY_SHADER_ARB:    typeStr = "GL_GEOMETRY_SHADER_ARB"; break;
-        case GL_FRAGMENT_SHADER:        typeStr = "GL_FRAGMENT_SHADER"; break;
-        default:                        typeStr = "???"; break;
-        }
-
         GLint infoLen = 0;
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLen);
         if (!infoLen)
-            fail("glCompileShader(%s) failed!", typeStr);
+            fail("glCompileShader(%s) failed!", typeStr.getPtr());
 
         Array<char> info(NULL, infoLen);
         info[0] = '\0';
         glGetShaderInfoLog(shader, infoLen, &infoLen, info.getPtr());
-        fail("glCompileShader(%s) failed!\n\n%s", typeStr, info.getPtr());
+        fail("glCompileShader(%s) failed!\n\n%s", typeStr.getPtr(), info.getPtr());
     }
 
     GLContext::checkErrors();
     return shader;
+}
+
+//------------------------------------------------------------------------
+
+void GLContext::Program::linkGLProgram(GLuint prog)
+{
+    glLinkProgram(prog);
+    GLint status = 0;
+    glGetProgramiv(prog, GL_LINK_STATUS, &status);
+    if (!status)
+    {
+        GLint infoLen = 0;
+        glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &infoLen);
+        if (!infoLen)
+            fail("glLinkProgram() failed!");
+
+        Array<char> info(NULL, infoLen);
+        info[0] = '\0';
+        glGetProgramInfoLog(prog, infoLen, &infoLen, info.getPtr());
+        fail("glLinkProgram() failed!\n\n%s", info.getPtr());
+    }
+    GLContext::checkErrors();
+}
+
+//------------------------------------------------------------------------
+
+void GLContext::Program::init(
+    const String& vertexSource,
+    GLenum geomInputType, GLenum geomOutputType, int geomVerticesOut, const String& geometrySource,
+    const String& fragmentSource)
+{
+    GLContext::staticInit();
+    m_glProgram = glCreateProgram();
+
+    // Setup vertex shader.
+
+    m_glVertexShader = createGLShader(GL_VERTEX_SHADER, "GL_VERTEX_SHADER", vertexSource);
+    glAttachShader(m_glProgram, m_glVertexShader);
+
+    // Setup geometry shader (GL_ARB_geometry_shader4).
+
+    if (geometrySource.getLength() == 0)
+        m_glGeometryShader = 0;
+    else
+    {
+        m_glGeometryShader = createGLShader(GL_GEOMETRY_SHADER_ARB, "GL_GEOMETRY_SHADER_ARB", geometrySource);
+        glAttachShader(m_glProgram, m_glGeometryShader);
+
+        if (!GL_FUNC_AVAILABLE(glProgramParameteriARB))
+            fail("glProgramParameteriARB() not available!");
+        glProgramParameteriARB(m_glProgram, GL_GEOMETRY_INPUT_TYPE_ARB, geomInputType);
+        glProgramParameteriARB(m_glProgram, GL_GEOMETRY_OUTPUT_TYPE_ARB, geomOutputType);
+        glProgramParameteriARB(m_glProgram, GL_GEOMETRY_VERTICES_OUT_ARB, geomVerticesOut);
+    }
+
+    // Setup fragment shader.
+
+    m_glFragmentShader = createGLShader(GL_FRAGMENT_SHADER, "GL_FRAGMENT_SHADER", fragmentSource);
+    glAttachShader(m_glProgram, m_glFragmentShader);
+
+    // Link.
+
+    linkGLProgram(m_glProgram);
 }
 
 //------------------------------------------------------------------------
@@ -266,6 +264,7 @@ void GLContext::makeCurrent(void)
 
 void GLContext::swapBuffers(void)
 {
+    glFinish();
     checkErrors();
     if (GL_FUNC_AVAILABLE(wglSwapIntervalEXT))
         wglSwapIntervalEXT(0); // WGL_EXT_swap_control
@@ -441,22 +440,75 @@ Vec2i GLContext::getStringSize(const String& str)
 
 //------------------------------------------------------------------------
 
-Vec2i GLContext::drawString(const String& str, const Vec4f& pos, const Vec2f& align, U32 abgr)
+Vec2i GLContext::drawLabel(const String& str, const Vec4f& pos, const Vec2f& align, U32 fgABGR, U32 bgABGR)
 {
-    Vec2i strSize = getStringSize(str);
-    if (strSize.x <= 0 || strSize.y <= 0)
+    // Split the string into lines.
+
+    Array<String> lines;
+    str.split('\n', lines, true);
+    while (lines.getSize() && !lines.getLast().getLength())
+        lines.removeLast();
+
+    // Compute metrics.
+
+    Vec2i strSize = 0;
+    for (int i = 0; i < lines.getSize(); i++)
+    {
+        if (!lines[i].getLength())
+            lines[i] = " "; // To avoid lineSize.y being zero.
+
+        Vec2i lineSize = getStringSize(lines[i]);
+        strSize.x = max(strSize.x, lineSize.x);
+        strSize.y += lineSize.y;
+    }
+
+    // Empty or fully transparent => skip.
+
+    if (strSize.x <= 0 || strSize.y <= 0 || ((fgABGR | bgABGR) & 0xFF000000) == 0)
         return strSize;
+
+    // Initialize GL state.
 
     glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT);
     glEnable(GL_BLEND);
     glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    const Vec2i& texSize = uploadString(str, strSize);
-    Vec4f pivot = m_vgXform * pos;
-    Vec2f adjust = -align * Vec2f(strSize);
-    drawString(pivot + Vec4f(adjust * m_viewScale * pivot.w, 0.0f, 0.0f), strSize, texSize, Vec4f::fromABGR(abgr));
+    // Draw each line.
+
+    Vec4f fgColor = Vec4f::fromABGR(fgABGR);
+    Vec4f bgColor = Vec4f::fromABGR(bgABGR);
+    Vec2f linePos(0.0f, (F32)strSize.y);
+
+    for (int i = 0; i < lines.getSize(); i++)
+    {
+        Vec2i lineSize = (lines.getSize() == 1) ? strSize : getStringSize(lines[i]);
+        if (lineSize.x <= 0 || lineSize.y <= 0)
+            continue;
+
+        linePos.y -= (F32)lineSize.y;
+        const Vec2i& texSize = uploadString(lines[i], lineSize);
+
+        Vec4f tpos = m_vgXform * pos;
+        Vec2f pixel = m_viewScale * tpos.w;
+        tpos.x += (linePos.x - align.x * (F32)lineSize.x) * pixel.x;
+        tpos.y += (linePos.y - align.y * (F32)strSize.y) * pixel.y;
+        tpos.x = floor((tpos.x + tpos.w) / pixel.x + 0.5f) * pixel.x - tpos.w;
+        tpos.y = floor((tpos.y + tpos.w) / pixel.y + 0.5f) * pixel.y - tpos.w;
+
+        if (bgColor.w > 0.0f)
+            for (int j = -1; j <= 1; j++)
+                for (int k = -1; k <= 1; k++)
+                    drawString(tpos + Vec4f(Vec2f((F32)j, (F32)k) * pixel, 0.0f, 0.0f), lineSize, texSize, bgColor);
+
+        if (fgColor.w > 0.0f)
+            drawString(tpos, lineSize, texSize, fgColor);
+    }
+
+    // Clean up.
+
     glPopAttrib();
+    checkErrors();
     return strSize;
 }
 
@@ -464,27 +516,8 @@ Vec2i GLContext::drawString(const String& str, const Vec4f& pos, const Vec2f& al
 
 Vec2i GLContext::drawLabel(const String& str, const Vec4f& pos, const Vec2f& align, U32 abgr)
 {
-    Vec2i strSize = getStringSize(str);
-    if (strSize.x <= 0 || strSize.y <= 0)
-        return strSize;
-
-    glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT);
-    glEnable(GL_BLEND);
-    glBlendEquation(GL_FUNC_ADD);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    Vec4f fgColor = Vec4f::fromABGR(abgr);
-    Vec4f bgColor(0.0f, 0.0f, 0.0f, sqr(fgColor.w));
-    const Vec2i& texSize = uploadString(str, strSize);
-    Vec4f pivot = m_vgXform * pos;
-    Vec2f adjust = -align * Vec2f(strSize);
-
-    for (int j = -1; j <= 1; j++)
-        for (int k = -1; k <= 1; k++)
-            drawString(pivot + Vec4f((adjust + Vec2f((F32)j, (F32)k)) * m_viewScale * pivot.w, 0.0f, 0.0f), strSize, texSize, bgColor);
-    drawString(pivot + Vec4f(adjust * m_viewScale * pivot.w, 0.0f, 0.0f), strSize, texSize, fgColor);
-    glPopAttrib();
-    return strSize;
+    Vec4f bg(0.0f, 0.0f, 0.0f, sqr(Vec4f::fromABGR(abgr).w)); // alpha^2
+    return drawLabel(str, pos, align, abgr, bg.toABGR());
 }
 
 //------------------------------------------------------------------------
@@ -580,12 +613,19 @@ GLContext::Program* GLContext::getProgram(const String& id) const
 
 void GLContext::setProgram(const String& id, Program* prog)
 {
-    if (!s_programs)
-        s_programs = new Hash<String, Program*>;
-    if (s_programs->contains(id))
+    Program* old = getProgram(id);
+    if (old == prog)
+        return;
+
+    if (old)
         delete s_programs->remove(id);
+
     if (prog)
+    {
+        if (!s_programs)
+            s_programs = new Hash<String, Program*>;
         s_programs->add(id, prog);
+    }
 }
 
 //------------------------------------------------------------------------
@@ -975,16 +1015,17 @@ const Vec2i& GLContext::uploadString(const String& str, const Vec2i& strSize)
 
 void GLContext::drawString(const Vec4f& pos, const Vec2i& strSize, const Vec2i& texSize, const Vec4f& color)
 {
-    // Determine orientation.
+    // Setup vertex arrays.
 
-    Vec2f posHi = pos.getXY() + Vec2f(strSize) * m_viewScale * pos.w;
+    Vec2f posLo = pos.getXY();
+    Vec2f posHi = posLo + Vec2f(strSize) * m_viewScale * pos.w;
     Vec2f texHi = Vec2f(strSize) / Vec2f(texSize);
 
     F32 posAttrib[16] =
     {
-        pos.x, pos.y, pos.z, pos.w,
-        posHi.x, pos.y, pos.z, pos.w,
-        pos.x, posHi.y, pos.z, pos.w,
+        posLo.x, posLo.y, pos.z, pos.w,
+        posHi.x, posLo.y, pos.z, pos.w,
+        posLo.x, posHi.y, pos.z, pos.w,
         posHi.x, posHi.y, pos.z, pos.w,
     };
 

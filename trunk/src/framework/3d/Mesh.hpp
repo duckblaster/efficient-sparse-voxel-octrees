@@ -147,7 +147,7 @@ public:
     int                 vboIndexSize        (int submesh)                   { getVBO(); return m_submeshes[submesh].sizeInVBO; }
 
     void                setGLAttrib         (GLContext* gl, int attrib, int loc);
-    void                draw                (GLContext* gl, const Mat4f& posToCamera, const Mat4f& projection);
+    void                draw                (GLContext* gl, const Mat4f& posToCamera, const Mat4f& projection, GLContext::Program* prog = NULL, bool gouraud = false);
 
     bool                isInMemory          (void) const                    { return m_isInMemory; }
     void                freeMemory          (void);
@@ -161,7 +161,10 @@ public:
     void                getBBox             (Vec3f& lo, Vec3f& hi) const;
     void                recomputeNormals    (void);
     void                flipTriangles       (void);
-    void                simplify            (F32 maxError);
+    void                simplify            (F32 maxError);                 // Collapse short edges. Do not allow vertices to drift more than maxError.
+    void                clean               (void);                         // Remove empty submeshes, degenerate triangles, and unreferences vertices.
+    void                dupVertsPerSubmesh  (void);                         // If a vertex is shared between multiple submeshes, duplicate it for each.
+    void                fixMaterialColors   (void);                         // If a material is textured, override diffuse color with average over texels.
 
     const U8*           operator[]          (int vidx) const                { return vertex(vidx); }
     U8*                 operator[]          (int vidx)                      { return mutableVertex(vidx); }

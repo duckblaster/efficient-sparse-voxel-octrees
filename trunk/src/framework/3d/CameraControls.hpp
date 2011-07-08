@@ -83,6 +83,9 @@ public:
     Mat4f               getCameraToLeftEye  (void) const        { Mat4f m; m.m02 = m_stereoConvergence; m.m03 = m_stereoSeparation; return m; }
     Mat4f               getCameraToRightEye (void) const        { return getCameraToLeftEye().inverted(); }
 
+    void                setCameraToWorld    (const Mat4f& m);   // Sets position & forward, and up if !keepAligned.
+    void                setWorldToCamera    (const Mat4f& m)    { setCameraToWorld(invert(m)); }
+
     void                initDefaults        (void);
     void                initForMesh         (const MeshBase* mesh);
 
@@ -91,6 +94,7 @@ public:
 
     void                addGUIControls      (void);             // done automatically on Window.addListener(this)
     void                removeGUIControls   (void);
+    void                setEnableMovement   (bool enable)       { m_enableMovement = enable; }
 
 private:
     bool                hasFeature          (Feature feature)   { return ((m_features & feature) != 0); }
@@ -114,6 +118,7 @@ private:
     U32                 m_features;
     Window*             m_window;
     Timer               m_timer;
+    bool                m_enableMovement;
 
     Vec3f               m_position;
     Vec3f               m_forward;

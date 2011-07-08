@@ -102,6 +102,7 @@ public:
 
     void                    addListener         (Listener* listener);
     void                    removeListener      (Listener* listener);
+    void                    removeListeners     (void);
 
     bool                    isKeyDown           (const String& key) const { return m_keysDown.contains(key); }
     bool                    isMouseKnown        (void) const    { return m_mouseKnown; }

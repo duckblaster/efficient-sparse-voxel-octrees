@@ -166,7 +166,7 @@ String CudaCompiler::compileCubinFile(bool enablePrints)
     if (enablePrints)
         printf("CudaCompiler: Compiling '%s'...", m_sourceFile.getPtr());
     if (m_window)
-        m_window->showModalMessage("Compiling CUDA kernel...");
+        m_window->showModalMessage("Compiling CUDA kernel...\nThis will take a few seconds.");
 
     runCompiler(cubinFile, finalOpts);
 
@@ -182,6 +182,25 @@ void CudaCompiler::staticInit(void)
     if (s_inited || hasError())
         return;
     s_inited = true;
+
+    // List potential CUDA and Visual Studio paths.
+
+	F32 driverVersion = CudaModule::getDriverVersion() / 10.0f;
+    Array<String> potentialCudaPaths;
+    Array<String> potentialVSPaths;
+
+	for (char drive = 'C'; drive <= 'E'; drive++)
+    {
+        for (int progX86 = 0; progX86 <= 1; progX86++)
+        {
+            String prog = sprintf("%c:\\%s", drive, (progX86 == 0) ? "Program Files" : "Program Files (x86)");
+		    potentialCudaPaths.add(prog + sprintf("\\NVIDIA GPU Computing Toolkit\\CUDA\\v%.1f", driverVersion));
+            potentialVSPaths.add(prog + "\\Microsoft Visual Studio 10.0");
+            potentialVSPaths.add(prog + "\\Microsoft Visual Studio 9.0");
+            potentialVSPaths.add(prog + "\\Microsoft Visual Studio 8");
+        }
+		potentialCudaPaths.add(sprintf("%c:\\CUDA", drive));
+    }
 
     // Query environment variables.
 
@@ -199,14 +218,11 @@ void CudaCompiler::staticInit(void)
     {
         cudaBinList.add(cudaBinEnv);
         splitPathList(cudaBinList, pathEnv);
-
-		F32 version = CudaModule::getDriverVersion() / 10.0f;
-		for (char drive = 'C'; drive <= 'E'; drive++)
-		{
-			cudaBinList.add(sprintf("%c:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v%.1f\\bin", drive, version));
-			cudaBinList.add(sprintf("%c:\\CUDA\\bin", drive));
-			cudaBinList.add(sprintf("%c:\\CUDA\\bin64", drive));
-    }
+        for (int i = 0; i < potentialCudaPaths.getSize(); i++)
+        {
+            cudaBinList.add(potentialCudaPaths[i] + "\\bin");
+            cudaBinList.add(potentialCudaPaths[i] + "\\bin64");
+        }
     }
 
     String cudaBinPath;
@@ -247,19 +263,18 @@ void CudaCompiler::staticInit(void)
 
     Array<String> vsBinList;
     splitPathList(vsBinList, pathEnv);
-    vsBinList.add("C:\\Program Files\\Microsoft Visual Studio 8\\VC\\bin");
-    vsBinList.add("C:\\Program Files\\Microsoft Visual Studio 9.0\\VC\\bin");
-    vsBinList.add("C:\\Program Files (x86)\\Microsoft Visual Studio 8\\VC\\bin");
-    vsBinList.add("C:\\Program Files (x86)\\Microsoft Visual Studio 9.0\\VC\\bin");
-    vsBinList.add("D:\\Program Files\\Microsoft Visual Studio 8\\VC\\bin");
-    vsBinList.add("D:\\Program Files\\Microsoft Visual Studio 9.0\\VC\\bin");
-    vsBinList.add("D:\\Program Files (x86)\\Microsoft Visual Studio 8\\VC\\bin");
-    vsBinList.add("D:\\Program Files (x86)\\Microsoft Visual Studio 9.0\\VC\\bin");
+    for (int i = 0; i < potentialVSPaths.getSize(); i++)
+        vsBinList.add(potentialVSPaths[i] + "\\VC\\bin");
 
     String vsBinPath;
-    for (int i = 0; i < vsBinList.getSize() && !vsBinPath.getLength(); i++)
+    for (int i = 0; i < vsBinList.getSize(); i++)
+    {
         if (vsBinList[i].getLength() && fileExists(vsBinList[i] + "\\vcvars32.bat"))
+        {
             vsBinPath = vsBinList[i];
+            break;
+        }
+    }
 
     if (!vsBinPath.getLength())
         fail("Unable to detect Visual Studio binary path!\nPlease run VCVARS32.BAT.");
@@ -274,9 +289,14 @@ void CudaCompiler::staticInit(void)
     cudaIncList.add("D:\\CUDA\\include");
 
     String cudaIncPath;
-    for (int i = 0; i < cudaIncList.getSize() && !cudaIncPath.getLength(); i++)
+    for (int i = 0; i < cudaIncList.getSize(); i++)
+    {
         if (cudaIncList[i].getLength() && fileExists(cudaIncList[i] + "\\cuda.h"))
+        {
             cudaIncPath = cudaIncList[i];
+            break;
+        }
+    }
 
     if (!cudaIncPath.getLength())
         fail("Unable to detect CUDA Toolkit include path!\nPlease set CUDA_INC_PATH environment variable.");
@@ -286,26 +306,25 @@ void CudaCompiler::staticInit(void)
     Array<String> vsIncList;
     vsIncList.add(vsBinPath + "\\..\\INCLUDE");
     splitPathList(vsIncList, includeEnv);
-    vsIncList.add("C:\\Program Files\\Microsoft Visual Studio 8\\VC\\INCLUDE");
-    vsIncList.add("C:\\Program Files\\Microsoft Visual Studio 9.0\\VC\\INCLUDE");
-    vsIncList.add("C:\\Program Files (x86)\\Microsoft Visual Studio 8\\VC\\INCLUDE");
-    vsIncList.add("C:\\Program Files (x86)\\Microsoft Visual Studio 9.0\\VC\\INCLUDE");
-    vsIncList.add("D:\\Program Files\\Microsoft Visual Studio 8\\VC\\INCLUDE");
-    vsIncList.add("D:\\Program Files\\Microsoft Visual Studio 9.0\\VC\\INCLUDE");
-    vsIncList.add("D:\\Program Files (x86)\\Microsoft Visual Studio 8\\VC\\INCLUDE");
-    vsIncList.add("D:\\Program Files (x86)\\Microsoft Visual Studio 9.0\\VC\\INCLUDE");
+    for (int i = 0; i < potentialVSPaths.getSize(); i++)
+        vsIncList.add(potentialVSPaths[i] + "\\VC\\INCLUDE");
 
     String vsIncPath;
-    for (int i = 0; i < vsIncList.getSize() && !vsIncPath.getLength(); i++)
+    for (int i = 0; i < vsIncList.getSize(); i++)
+    {
         if (vsIncList[i].getLength() && fileExists(vsIncList[i] + "\\crtdefs.h"))
+        {
             vsIncPath = vsIncList[i];
+            break;
+        }
+    }
 
     if (!vsIncPath.getLength())
         fail("Unable to detect Visual Studio include path!\nPlease run VCVARS32.BAT.");
 
     // Form NVCC command line.
 
-    s_nvccCommand = sprintf("set PATH=%s;%s & nvcc.exe -ccbin \"%s\" -I\"%s\" -I\"%s\" -D_CRT_SECURE_NO_DEPRECATE",
+    s_nvccCommand = sprintf("set PATH=%s;%s & nvcc.exe -ccbin \"%s\" -I\"%s\" -I\"%s\" -I. -D_CRT_SECURE_NO_DEPRECATE",
         cudaBinPath.getPtr(),
         pathEnv.getPtr(),
         vsBinPath.getPtr(),

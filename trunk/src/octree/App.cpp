@@ -248,16 +248,16 @@ bool App::handleEvent(const Window::Event& ev)
     case Action_None:
         break;
 
+    case Action_About:
+        m_window.showMessageDialog("About", s_aboutText);
+        break;
+
     case Action_LoadState:
         m_commonCtrl.loadStateDialog();
         break;
 
     case Action_SaveState:
         m_commonCtrl.saveStateDialog();
-        break;
-
-    case Action_About:
-        m_window.showMessageDialog("About", s_aboutText);
         break;
 
     case Action_ResetCamera:
@@ -314,12 +314,12 @@ bool App::handleEvent(const Window::Event& ev)
         name = m_window.showFileLoadDialog("Import mesh", getMeshImportFilter(), s_initialMeshDir);
         if (name.getLength())
         {
-            m_window.showModalMessage(sprintf("Importing mesh from '%s'...", name.getPtr()));
+            m_window.showModalMessage(sprintf("Importing mesh from '%s'...\nThis will take a few seconds.", name.getFileName().getPtr()));
             MeshBase* mesh = importMesh(name);
             failIfError();
             if (mesh)
             {
-                m_window.showModalMessage("Initializing temporary octree file...");
+                m_window.showModalMessage("Initializing temporary octree file...\nThis will take a few seconds.");
                 m_manager.newFile();
                 m_manager.addMesh(mesh, OctreeManager::BuilderType_Mesh, getBuilderParams());
                 resetCamera();
@@ -330,7 +330,7 @@ bool App::handleEvent(const Window::Event& ev)
         break;
 
     case Action_RebuildOctree:
-        m_window.showModalMessage("Initializing temporary octree file...");
+        m_window.showModalMessage("Initializing temporary octree file...\nThis will take a few seconds.");
         m_manager.rebuildFile(OctreeManager::BuilderType_Mesh, getBuilderParams());
         break;
 
@@ -414,7 +414,7 @@ void App::writeState(StateDump& d) const
 
 bool App::loadOctree(const String& fileName)
 {
-    m_window.showModalMessage(sprintf("Loading octree from '%s'...", fileName.getPtr()));
+    m_window.showModalMessage(sprintf("Loading octree from '%s'...\nThis will take a few seconds.", fileName.getFileName().getPtr()));
 
     String oldError = clearError();
     m_manager.loadFile(fileName);
@@ -454,26 +454,26 @@ void App::rebuildGui(void)
     cc.resetControls();
 
     cc.setControlVisibility(true);
-    cc.addButton((S32*)&m_action, Action_LoadState,             FW_KEY_NONE,        "Load state... (0)");
-    cc.addButton((S32*)&m_action, Action_SaveState,             FW_KEY_NONE,        "Save state... (Alt-0)");
-    cc.addButton((S32*)&m_action, Action_About,                 FW_KEY_NONE,        "About...");
     cc.addToggle(&m_showHelp,                                   FW_KEY_F1,          "Show help (F1)");
+    cc.addButton((S32*)&m_action, Action_About,                 FW_KEY_NONE,        "About...");
+    cc.addButton((S32*)&m_action, Action_LoadState,             FW_KEY_NONE,        "Load state... [0]");
+    cc.addButton((S32*)&m_action, Action_SaveState,             FW_KEY_NONE,        "Save state... [Alt-0]");
     cc.addSeparator();
 
     cc.setControlVisibility(m_showViewControls);
-    cc.addToggle((S32*)&m_activeView, View_Primary,             FW_KEY_F2,          "Default view (F2)");
-    cc.addToggle((S32*)&m_activeView, View_PrimaryAndShadow,    FW_KEY_F3,          "View with shadows (F3)");
-    cc.addToggle((S32*)&m_activeView, View_OriginalMesh,        FW_KEY_F4,          "View original mesh (F4)");
-    cc.addToggle((S32*)&m_activeView, View_OctreeDepth,         FW_KEY_F5,          "View octree depth (F5)");
-    cc.addToggle((S32*)&m_activeView, View_IterationCount,      FW_KEY_F6,          "View raycast iteration count (F6)");
+    cc.addToggle((S32*)&m_activeView, View_Primary,             FW_KEY_F2,          "Default view [F2]");
+    cc.addToggle((S32*)&m_activeView, View_PrimaryAndShadow,    FW_KEY_F3,          "View with shadows [F3]");
+    cc.addToggle((S32*)&m_activeView, View_OriginalMesh,        FW_KEY_F4,          "View original mesh [F4]");
+    cc.addToggle((S32*)&m_activeView, View_OctreeDepth,         FW_KEY_F5,          "View octree depth [F5]");
+    cc.addToggle((S32*)&m_activeView, View_IterationCount,      FW_KEY_F6,          "View raycast iteration count [F6]");
     cc.addSeparator();
 
     cc.setControlVisibility(m_showViewControls);
-    cc.addToggle(&m_disableContourTest,                         FW_KEY_Z,           "Disable contour test (Z)");
-    cc.addToggle(&m_disableBeamOptimization,                    FW_KEY_X,           "Disable beam optimization (X)");
-    cc.addToggle(&m_disablePostProcessFiltering,                FW_KEY_C,           "Disable post-process filtering (C)");
-    cc.addToggle(&m_enableAntialias,                            FW_KEY_V,           "Enable 4x antialiasing (V)");
-    cc.addToggle(&m_enableLargeAAFilter,                        FW_KEY_B,           "Enable large antialias filter (B)");
+    cc.addToggle(&m_disableContourTest,                         FW_KEY_Z,           "Disable contour test [Z]");
+    cc.addToggle(&m_disableBeamOptimization,                    FW_KEY_X,           "Disable beam optimization [X]");
+    cc.addToggle(&m_disablePostProcessFiltering,                FW_KEY_C,           "Disable post-process filtering [C]");
+    cc.addToggle(&m_enableAntialias,                            FW_KEY_V,           "Enable 4x antialiasing [V]");
+    cc.addToggle(&m_enableLargeAAFilter,                        FW_KEY_B,           "Enable large antialias filter [B]");
     cc.beginSliderStack();
     cc.addSlider(&m_maxVoxelSize, 0.1f, 10.0f, true, FW_KEY_NONE, FW_KEY_NONE,      "Maximum voxel size = %g pixels");
     cc.addSlider(&m_brightness, 0.0f, 5.0f, false, FW_KEY_NONE, FW_KEY_NONE,        "Brightness coefficient = %g");
@@ -488,11 +488,11 @@ void App::rebuildGui(void)
     cc.addSeparator();
 
     cc.setControlVisibility(m_showManagementControls);
-    cc.addButton((S32*)&m_action, Action_LoadOctree,            FW_KEY_I,           "Load octree... (I)");
-    cc.addButton((S32*)&m_action, Action_SaveOctree,            FW_KEY_O,           "Save octree... (O)");
-    cc.addButton((S32*)&m_action, Action_NewOctreeFromMesh,     FW_KEY_M,           "New octree from mesh... (M)");
-    cc.addButton((S32*)&m_action, Action_RebuildOctree,         FW_KEY_BACKSPACE,   "Rebuild octree (Backspace)");
-    cc.addButton((S32*)&m_action, Action_PrintStats,            FW_KEY_P,           "Print octree stats... (P)");
+    cc.addButton((S32*)&m_action, Action_LoadOctree,            FW_KEY_I,           "Load octree... [I]");
+    cc.addButton((S32*)&m_action, Action_SaveOctree,            FW_KEY_O,           "Save octree... [O]");
+    cc.addButton((S32*)&m_action, Action_NewOctreeFromMesh,     FW_KEY_M,           "New octree from mesh... [M]");
+    cc.addButton((S32*)&m_action, Action_RebuildOctree,         FW_KEY_BACKSPACE,   "Rebuild octree [Backspace]");
+    cc.addButton((S32*)&m_action, Action_PrintStats,            FW_KEY_P,           "Print octree stats... [P]");
     cc.addSlider(&m_maxOctreeLevels, 1, OctreeFile::UnitScale, false, FW_KEY_NONE, FW_KEY_NONE, "Maximum octree levels to load/build = %d levels");
 
     cc.setControlVisibility(m_showManagementControls);
@@ -762,6 +762,8 @@ void FW::runInteractive(const Vec2i& frameSize, const String& stateFile, const S
 
     if (hasError())
         delete app;
+    else
+        app->flashButtonTitles();
 }
 
 //------------------------------------------------------------------------

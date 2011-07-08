@@ -95,6 +95,7 @@ char* BufferedInputStream::readLine(bool combineWithBackslash, bool normalizeWhi
         {
             if (!pendingBackslash)
                 break;
+            ptr[outPos++] = ' ';
             pendingBackslash = false;
         }
         else if (chr != '\r')

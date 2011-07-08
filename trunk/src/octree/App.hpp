@@ -31,9 +31,9 @@ private:
     {
         Action_None,
 
+        Action_About,
         Action_LoadState,
         Action_SaveState,
-        Action_About,
 
         Action_ResetCamera,
         Action_ImportCameraSignature,
@@ -70,6 +70,7 @@ public:
     void                        loadDefaultState    (void)                      { if (!m_commonCtrl.loadState(m_commonCtrl.getStateFileName(1))) firstTimeInit(); }
     bool                        loadOctree          (const String& fileName);
     void                        resetCamera         (void);
+    void                        flashButtonTitles   (void)                      { m_commonCtrl.flashButtonTitles(); }
 
 private:
     void                        rebuildGui          (void);

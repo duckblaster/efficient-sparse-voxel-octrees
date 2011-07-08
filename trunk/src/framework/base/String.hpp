@@ -110,6 +110,8 @@ bool    parseSpace      (const char*& ptr);
 bool    parseChar       (const char*& ptr, char chr);
 bool    parseLiteral    (const char*& ptr, const char* str);
 bool    parseInt        (const char*& ptr, S32& value);
+bool    parseInt        (const char*& ptr, S64& value);
+bool    parseHex        (const char*& ptr, U32& value);
 bool    parseFloat      (const char*& ptr, F32& value);
 
 //------------------------------------------------------------------------

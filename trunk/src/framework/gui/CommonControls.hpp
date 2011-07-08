@@ -170,8 +170,11 @@ public:
 
     void            showControls        (bool show)                 { m_showControls = show; }
     void            showFPS             (bool show)                 { m_showFPS = show; }
+    bool            getShowControls     (void) const                { return m_showControls; }
+    bool            getShowFPS          (void) const                { return m_showFPS; }
 
     F32             getKeyBoost         (void) const;
+    void            flashButtonTitles   (void);
 
 private:
     bool            hasFeature          (Feature feature)           { return ((m_features & feature) != 0); }
@@ -195,6 +198,7 @@ private:
     static void     setSliderValue      (Slider* s, F32 v);
     static String   getSliderLabel      (const Slider* s);
     static void     sliderKeyDown       (Slider* s, int dir);
+    void            enterSliderValue    (Slider* s);
 
     static void     drawPanel           (GLContext* gl, const Vec2f& pos, const Vec2f& size, U32 interiorABGR, U32 topLeftABGR, U32 bottomRightABGR);
 

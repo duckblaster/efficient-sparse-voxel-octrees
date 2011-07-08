@@ -33,6 +33,7 @@ CameraControls::CameraControls(CommonControls* commonControls, U32 features)
 :   m_commonControls    (commonControls),
     m_features          (features),
     m_window            (NULL),
+    m_enableMovement    (true),
 
     m_dragLeft          (false),
     m_dragMiddle        (false),
@@ -145,6 +146,8 @@ bool CameraControls::handleEvent(const Window::Event& ev)
 
     // Apply movement.
 
+    if (m_enableMovement)
+    {
     if (!move.isZero())
         m_position += orient * move;
 
@@ -163,6 +166,9 @@ bool CameraControls::handleEvent(const Window::Event& ev)
         Vec3f up = orient.transposed() * m_up;
         m_up = orient * Vec3f(up.x * cos(rotate.z) - sin(rotate.z), up.x * sin(rotate.z) + up.y * cos(rotate.z), up.z);
     }
+    }
+
+    // Apply alignment.
 
     if (m_alignY)
         m_up = Vec3f(0.0f, 1.0f, 0.0f);
@@ -262,6 +268,17 @@ Mat4f CameraControls::getWorldToCamera(void) const
     r.setRow(1, Vec4f(orient.col(1), -pos.y));
     r.setRow(2, Vec4f(orient.col(2), -pos.z));
     return r;
+}
+
+//------------------------------------------------------------------------
+
+void CameraControls::setCameraToWorld(const Mat4f& m)
+{
+    m_position = m.col(3).toCartesian();
+    m_forward = -normalize(Vec4f(m.col(2)).getXYZ());
+
+    if (!m_keepAligned)
+        m_up = normalize(Vec4f(m.col(1)).getXYZ());
 }
 
 //------------------------------------------------------------------------

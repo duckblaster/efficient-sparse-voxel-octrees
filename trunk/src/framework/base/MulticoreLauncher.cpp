@@ -21,24 +21,18 @@ using namespace FW;
 
 //------------------------------------------------------------------------
 
-#define MAX_TASK_ARRAY_SLACK    4096
-
-//------------------------------------------------------------------------
-
 Spinlock                        MulticoreLauncher::s_lock;
 S32                             MulticoreLauncher::s_numInstances   = 0;
 S32                             MulticoreLauncher::s_desiredThreads = -1;
 
 Monitor*                        MulticoreLauncher::s_monitor        = NULL;
-Array<MulticoreLauncher::Task>  MulticoreLauncher::s_pending;
-S32                             MulticoreLauncher::s_nextPending    = 0;
+Deque<MulticoreLauncher::Task>  MulticoreLauncher::s_pending;
 S32                             MulticoreLauncher::s_numThreads     = 0;
 
 //------------------------------------------------------------------------
 
 MulticoreLauncher::MulticoreLauncher(void)
-:   m_numTasks      (0),
-    m_nextFinished  (0)
+:   m_numTasks  (0)
 {
     s_lock.enter();
 
@@ -50,10 +44,7 @@ MulticoreLauncher::MulticoreLauncher(void)
     // First instance => static init.
 
     if (s_numInstances++ == 0)
-    {
         s_monitor = new Monitor;
-        s_nextPending = 0;
-    }
 
     s_lock.leave();
 }
@@ -100,17 +91,16 @@ MulticoreLauncher& MulticoreLauncher::push(TaskFunc func, void* data, int firstI
 
     s_monitor->enter();
 
-    m_numTasks += numTasks;
-    Task* tasks = s_pending.add(NULL, numTasks);
-
     for (int i = 0; i < numTasks; i++)
     {
-        tasks[i].launcher = this;
-        tasks[i].func     = func;
-        tasks[i].data     = data;
-        tasks[i].idx      = firstIdx + i;
-        tasks[i].result   = NULL;
+        Task& task = s_pending.addLast();
+        task.launcher = this;
+        task.func     = func;
+        task.data     = data;
+        task.idx      = firstIdx + i;
+        task.result   = NULL;
     }
+    m_numTasks += numTasks;
 
     applyNumThreads();
     s_monitor->notifyAll();
@@ -133,13 +123,7 @@ MulticoreLauncher::Task MulticoreLauncher::pop(void)
     // Pop from the queue.
 
     m_numTasks--;
-    Task task = m_finished[m_nextFinished++];
-    if (m_nextFinished > MAX_TASK_ARRAY_SLACK)
-    {
-        m_finished.remove(0, m_nextFinished);
-        m_nextFinished = 0;
-    }
-
+    Task task = m_finished.removeFirst();
     s_monitor->leave();
     return task;
 }
@@ -155,7 +139,7 @@ int MulticoreLauncher::getNumTasks(void) const
 
 int MulticoreLauncher::getNumFinished(void) const
 {
-    return m_finished.getSize() - m_nextFinished;
+    return m_finished.getSize();
 }
 
 //------------------------------------------------------------------------
@@ -238,7 +222,7 @@ void MulticoreLauncher::threadFunc(void* param)
     {
         // No pending tasks => wait.
 
-        if (s_nextPending >= s_pending.getSize())
+        if (!s_pending.getSize())
         {
             s_monitor->wait();
             continue;
@@ -246,13 +230,8 @@ void MulticoreLauncher::threadFunc(void* param)
 
         // Pick a task.
 
-        Task task = s_pending.get(s_nextPending++);
+        Task task = s_pending.removeFirst();
         MulticoreLauncher* launcher = task.launcher;
-        if (s_nextPending > MAX_TASK_ARRAY_SLACK)
-        {
-            s_pending.remove(0, s_nextPending);
-            s_nextPending = 0;
-        }
 
         // Execute.
 
@@ -263,7 +242,7 @@ void MulticoreLauncher::threadFunc(void* param)
 
         // Mark as finished.
 
-        launcher->m_finished.add(task);
+        launcher->m_finished.addLast(task);
         s_monitor->notifyAll();
     }
 

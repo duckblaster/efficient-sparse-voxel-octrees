@@ -89,63 +89,21 @@ CUarray Texture::getCudaArray(const ImageFormat::ID desiredFormat) const
 
 //------------------------------------------------------------------------
 
-Texture Texture::getMipLevel(int level, bool generateByGL) const
+Texture Texture::getMipLevel(int level) const
 {
-    if (!exists() || level <= 0)
-        return *this;
-
-    // No mipmaps => generate.
-
-    if (!m_data->nextMip)
+    const Texture* curr = this;
+    for (int i = 0; i < level && curr->exists(); i++)
     {
-        // Generate by OpenGL.
-
-        if (generateByGL)
+        if (!curr->m_data->nextMip)
         {
-            GLint oldTex = 0;
-            glGetIntegerv(GL_TEXTURE_BINDING_2D, &oldTex);
-            glBindTexture(GL_TEXTURE_2D, getGLTexture(ImageFormat::ABGR_8888));
-
-            const Texture* prevTex = this;
-            for (int level = 1;; level++)
-            {
-                GLint w, h;
-                glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_WIDTH, &w);
-                glGetTexLevelParameteriv(GL_TEXTURE_2D, level, GL_TEXTURE_HEIGHT, &h);
-                if (w <= 0 || h <= 0)
+            Image* scaled = curr->m_data->image->downscale2x();
+            if (!scaled)
                     break;
-
-                Image* image = new Image(Vec2i(w, h), ImageFormat::ABGR_8888);
-                glGetTexImage(GL_TEXTURE_2D, level, GL_RGBA, GL_UNSIGNED_BYTE, image->getMutablePtr());
-                prevTex->m_data->nextMip = new Texture(image);
-                prevTex = prevTex->m_data->nextMip;
+            curr->m_data->nextMip = new Texture(scaled);
             }
-
-            glBindTexture(GL_TEXTURE_2D, oldTex);
-            GLContext::checkErrors();
-}
-
-        // Generate by Image::downscale2x().
-
-        else
-        {
-            const Texture* prevTex = this;
-            Image* currImage = getImage()->downscale2x();
-            while (currImage)
-            {
-                prevTex->m_data->nextMip = new Texture(currImage);
-                prevTex = prevTex->m_data->nextMip;
-                currImage = currImage->downscale2x();
-            }
+        curr = curr->m_data->nextMip;
         }
-    }
-
-    // Find the requested level.
-
-    const Texture* currTex = this;
-    for (int i = 0; i < level && currTex->m_data->nextMip; i++)
-        currTex = currTex->m_data->nextMip;
-    return *currTex;
+    return *curr;
 }
 
 //------------------------------------------------------------------------
@@ -195,14 +153,27 @@ Texture::Data* Texture::createData(const String& id)
 
 //------------------------------------------------------------------------
 
+void Texture::referData(Data* data)
+{
+    FW_ASSERT(data);
+    data->refCountLock.enter();
+    data->refCount++;
+    data->refCountLock.leave();
+}
+
+//------------------------------------------------------------------------
+
 void Texture::unreferData(Data* data)
 {
     FW_ASSERT(data);
 
     // Decrease refcount.
 
-    data->refCount--;
-    if (data->refCount)
+    data->refCountLock.enter();
+    int refCount = --data->refCount;
+    data->refCountLock.leave();
+
+    if (refCount != 0)
         return;
 
     // Remove from hash.

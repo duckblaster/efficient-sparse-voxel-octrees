@@ -59,7 +59,7 @@ Image* FW::importTargaImage(InputStream& stream)
         format = ImageFormat::RGBA_5551;
     else if (pixelBits == 24 && attribBits == 0)
         format = ImageFormat::R8_G8_B8;
-    else if (pixelBits == 32 && attribBits == 8)
+    else if (pixelBits == 32 && (attribBits == 8 || attribBits == 0))
         format = ImageFormat::R8_G8_B8_A8;
     else
         setError("Unsupported Targa color format %d/%d!", pixelBits, attribBits);

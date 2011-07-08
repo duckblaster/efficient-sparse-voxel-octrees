@@ -20,6 +20,8 @@
 #include "io/File.hpp"
 #include "io/StateDump.hpp"
 
+#include <stdio.h>
+
 using namespace FW;
 
 //------------------------------------------------------------------------
@@ -139,6 +141,11 @@ bool CommonControls::handleEvent(const Window::Event& ev)
                 stopPropagation = true;
                 if (m_activeToggle != -1)
                     selectToggle(m_toggles[m_activeToggle]);
+            }
+            else if (ev.key == FW_KEY_MOUSE_MIDDLE && m_activeSlider != -1 && !m_dragging)
+            {
+                stopPropagation = true;
+                enterSliderValue(m_sliders[m_activeSlider]);
             }
             else if (ev.keyUnicode >= '0' && ev.keyUnicode <= '9')
             {
@@ -435,6 +442,16 @@ F32 CommonControls::getKeyBoost(void) const
             boost /= 5.0f;
     }
     return boost;
+}
+
+//------------------------------------------------------------------------
+
+void CommonControls::flashButtonTitles(void)
+{
+    for (int i = 0; i < m_toggles.getSize(); i++)
+        m_toggles[i]->highlightTime = FW_F32_MAX;
+    if (m_window)
+        m_window->repaint();
 }
 
 //------------------------------------------------------------------------
@@ -873,7 +890,7 @@ void CommonControls::selectToggle(Toggle* t)
         if (*t->enumTarget == t->enumValue)
             return;
         *t->enumTarget = t->enumValue;
-}
+    }
 
     if (t->dirtyNotify)
         *t->dirtyNotify = true;
@@ -956,8 +973,61 @@ void CommonControls::sliderKeyDown(Slider* s, int dir)
     if (!s->intTarget)
         return;
 
+    S32 oldValue = *s->intTarget;
     *s->intTarget = clamp(*s->intTarget + dir, (S32)s->minValue, (S32)s->maxValue);
     s->slack = 0.0f;
+
+    if (*s->intTarget != oldValue && s->dirtyNotify)
+        *s->dirtyNotify = true;
+}
+
+//------------------------------------------------------------------------
+
+void CommonControls::enterSliderValue(Slider* s)
+{
+    FW_ASSERT(s);
+    m_window->setVisible(false);
+    //m_window.showModalMessage(sprintf("Please enter in text window: %s", s->getSliderLabel().getPtr()));
+    printf(sprintf("\nEnter %s:\n", getSliderLabel(s).getPtr()).getPtr());
+
+    // Much like setSliderValue()
+    // (FIXME Annoying thing about scanf, if you just hit Enter, it keeps reading)
+    bool dirty = false;
+    if (s->floatTarget)
+    {
+        float fval;
+        if (scanf_s("%g", &fval))
+        {
+            dirty = (*s->floatTarget != fval);
+            *s->floatTarget = fval;
+            s->slack = 0.0f;
+        }
+        else
+        {
+            printf("No value entered.\n");
+            scanf_s("%*s");             // flush line
+        }
+    }
+    else
+    {
+        int ival;
+        if (scanf_s("%d", &ival))
+        {
+            dirty = (*s->intTarget != ival);
+            *s->intTarget = ival;
+            s->slack = 0.0f;
+        }
+        else
+        {
+            printf("No value entered.\n");
+            scanf_s("%*s");             // flush line
+        }
+     }
+
+    if (dirty && s->dirtyNotify)
+        *s->dirtyNotify = true;
+
+    m_window->setVisible(true);         // FIXME pause if error msg
 }
 
 //------------------------------------------------------------------------

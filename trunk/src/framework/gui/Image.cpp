@@ -19,6 +19,7 @@
 #include "io/ImageRawPngIO.hpp"
 #include "io/ImageTargaIO.hpp"
 #include "io/ImageTiffIO.hpp"
+#include "io/ImageBmpIO.hpp"
 #include "io/File.hpp"
 
 using namespace FW;
@@ -604,42 +605,78 @@ CUarray Image::createCudaArray(ImageFormat::ID desiredFormat) const
 }
 
 //------------------------------------------------------------------------
+// Implements a polyphase filter with round-down semantics from:
+//
+// Non-Power-of-Two Mipmapping
+// (NVIDIA whitepaper)
+// http://developer.nvidia.com/object/np2_mipmapping.html
 
 Image* Image::downscale2x(void) const
 {
-    if (m_size.x * m_size.y <= 1)
+    // 1x1 or smaller => Bail out.
+
+    int area = m_size.x * m_size.y;
+    if (area <= 1)
         return NULL;
 
-    Image* res = new Image((m_size + 1) >> 1, ImageFormat::ABGR_8888);
-    Image tmp(Vec2i(m_size.x, 2), ImageFormat::ABGR_8888);
+    // Choose filter dimensions.
 
-    for (int y = 0; y < res->m_size.y; y++)
+    int fw = (m_size.x == 1) ? 1 : ((m_size.x & 1) == 0) ? 2 : 3;
+    int fh = (m_size.y == 1) ? 1 : ((m_size.y & 1) == 0) ? 2 : 3;
+    Vec2i resSize = max(m_size >> 1, 1);
+    int halfArea = area >> 1;
+
+    // Allocate temporary scanline buffer and result image.
+
+    Image tmp(Vec2i(m_size.x, fh), ImageFormat::ABGR_8888);
+    Image* res = new Image(resSize, ImageFormat::ABGR_8888);
+    U32* resPtr = (U32*)res->getMutablePtr();
+
+    // Process each scanline in the result.
+
+    for (int y = 0; y < resSize.y; y++)
     {
-        int h = min(m_size.y - y * 2, 2);
-        tmp.set(0, *this, Vec2i(0, y * 2), Vec2i(m_size.x, h));
-        U32* resPtr = (U32*)res->getMutablePtr(Vec2i(0, y));
+        // Copy source scanlines into the temporary buffer.
 
-        for (int x = 0; x < res->m_size.x; x++)
+        tmp.set(0, *this, Vec2i(0, y * 2), Vec2i(m_size.x, fh));
+
+        // Choose weights along the Y-axis.
+
+        Vec3i wy(resSize.y);
+        if (fh == 3)
+            wy = Vec3i(resSize.y - y, resSize.y, y + 1);
+
+        // Process each pixel in the result.
+
+        for (int x = 0; x < resSize.x; x++)
         {
-            int w = min(m_size.x - x * 2, 2);
-            const U32* tmpPtr = (const U32*)tmp.getPtr(Vec2i(x * 2, 0));
-            Vec4i val = 0;
+            // Choose weights along the X-axis.
 
-            for (int yy = 0; yy < h; yy++)
+            Vec3i wx(resSize.x);
+            if (fw == 3)
+                wx = Vec3i(resSize.x - x, resSize.x, x + 1);
+
+            // Compute weighted average of pixel values.
+
+            Vec4i sum = 0;
+            const U32* tmpPtr = (const U32*)tmp.getPtr(Vec2i(x * 2, 0));
+
+            for (int yy = 0; yy < fh; yy++)
             {
-                for (int xx = 0; xx < w; xx++)
+                for (int xx = 0; xx < fw; xx++)
                 {
-                    U32 t = tmpPtr[xx];
-                    val.x += t & 0xFF;
-                    val.y += (t >> 8) & 0xFF;
-                    val.z += (t >> 16) & 0xFF;
-                    val.w += t >> 24;
+                    U32 abgr = tmpPtr[xx];
+                    int weight = wx[xx] * wy[yy];
+                    sum.x += (abgr & 0xFF) * weight;
+                    sum.y += ((abgr >> 8) & 0xFF) * weight;
+                    sum.z += ((abgr >> 16) & 0xFF) * weight;
+                    sum.w += (abgr >> 24) * weight;
                 }
                 tmpPtr += m_size.x;
             }
 
-            val = (val * 2 + w * h) >> (w + h - 1);
-            resPtr[x] = val.x | (val.y << 8) | (val.z << 16) | (val.w << 24);
+            sum = (sum + halfArea) / area;
+            *resPtr++ = sum.x | (sum.y << 8) | (sum.z << 16) | (sum.w << 24);
         }
     }
     return res;
@@ -960,6 +997,7 @@ Image* FW::importImage(const String& fileName)
     if (lower.endsWith(".bin"))                             STREAM(importBinaryImage(stream))
     if (lower.endsWith(".tga") || lower.endsWith(".targa")) STREAM(importTargaImage(stream))
     if (lower.endsWith(".tif") || lower.endsWith(".tiff"))  STREAM(importTiffImage(stream))
+    if (lower.endsWith(".bmp"))                             STREAM(importBmpImage(stream))
 #undef STREAM
 
     setError("importImage(): Unsupported file extension '%s'!", fileName.getPtr());
@@ -976,8 +1014,9 @@ void FW::exportImage(const String& fileName, const Image* image)
 #define STREAM(CALL) { File file(fileName, File::Create); BufferedOutputStream stream(file); CALL; stream.flush(); return; }
     if (lower.endsWith(".bin"))                             STREAM(exportBinaryImage(stream, image))
     if (lower.endsWith(".png"))                             STREAM(exportRawPngImage(stream, image))
-    if (lower.endsWith(".tga"))                             STREAM(exportTargaImage(stream, image))
+    if (lower.endsWith(".tga") || lower.endsWith(".targa")) STREAM(exportTargaImage(stream, image))
     if (lower.endsWith(".tif") || lower.endsWith(".tiff"))  STREAM(exportTiffImage(stream, image))
+    if (lower.endsWith(".bmp"))                             STREAM(exportBmpImage(stream, image))
 #undef STREAM
 
     setError("exportImage(): Unsupported file extension '%s'!", fileName.getPtr());
@@ -990,6 +1029,7 @@ String FW::getImageImportFilter(void)
     return
         "tga;targa:Targa Image,"
         "tif;tiff:TIFF Image,"
+        "bmp:BMP Image,"
         "bin:Binary Image";
 }
 
@@ -1001,6 +1041,7 @@ String FW::getImageExportFilter(void)
         "png:PNG Image,"
         "tga;targa:Targa Image,"
         "tif;tiff:TIFF Image,"
+        "bmp:BMP Image,"
         "bin:Binary Image";
 }
 

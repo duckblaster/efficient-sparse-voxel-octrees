@@ -333,6 +333,14 @@
 				>
 			</File>
 			<File
+				RelativePath=".\src\framework\base\Deque.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\src\framework\base\Deque.hpp"
+				>
+			</File>
+			<File
 				RelativePath=".\src\framework\base\DLLImports.cpp"
 				>
 			</File>
@@ -496,6 +504,14 @@
 				RelativePath=".\src\framework\3d\Texture.hpp"
 				>
 			</File>
+			<File
+				RelativePath=".\src\framework\3d\TextureAtlas.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\src\framework\3d\TextureAtlas.hpp"
+				>
+			</File>
 		</Filter>
 		<Filter
 			Name="gpu"
@@ -558,6 +574,14 @@
 			</File>
 			<File
 				RelativePath=".\src\framework\io\ImageBinaryIO.hpp"
+				>
+			</File>
+			<File
+				RelativePath=".\src\framework\io\ImageBmpIO.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\src\framework\io\ImageBmpIO.hpp"
 				>
 			</File>
 			<File

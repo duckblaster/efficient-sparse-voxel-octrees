@@ -21,19 +21,31 @@ namespace FW
 {
 //------------------------------------------------------------------------
 
-typedef int     (*SortCompareFunc)  (void* data, int idxA, int idxB);
-typedef void    (*SortSwapFunc)     (void* data, int idxA, int idxB);
+typedef int         (*SortCompareFunc)  (void* data, int idxA, int idxB);
+typedef void        (*SortSwapFunc)     (void* data, int idxA, int idxB);
 
 //------------------------------------------------------------------------
 
-void sort       (int start, int end, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc); // [start, end[
+void sort           (int start, int end, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc); // [start, end[
 void sortMulticore  (int start, int end, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc); // [start, end[
 
-int  compareS32 (void* data, int idxA, int idxB);
-void swapS32    (void* data, int idxA, int idxB);
+int  compareU32     (void* data, int idxA, int idxB);
+void swapU32        (void* data, int idxA, int idxB);
 
-int  compareF32 (void* data, int idxA, int idxB);
-void swapF32    (void* data, int idxA, int idxB);
+int  compareU64     (void* data, int idxA, int idxB);
+void swapU64        (void* data, int idxA, int idxB);
+
+int  compareS32     (void* data, int idxA, int idxB);
+void swapS32        (void* data, int idxA, int idxB);
+
+int  compareS64     (void* data, int idxA, int idxB);
+void swapS64        (void* data, int idxA, int idxB);
+
+int  compareF32     (void* data, int idxA, int idxB);
+void swapF32        (void* data, int idxA, int idxB);
+
+int  compareF64     (void* data, int idxA, int idxB);
+void swapF64        (void* data, int idxA, int idxB);
 
 //------------------------------------------------------------------------
 }

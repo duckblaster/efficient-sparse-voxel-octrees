@@ -193,7 +193,7 @@ extern "C" __global__ void ambientKernel(void)
             float3 orig = rpos;
 
             // sample color and normal at request position, adjust ray origin
-            F32 vsize = __int_as_float((127 - min(CAST_STACK_DEPTH - rlevel, 13)) << 23);
+            F32 vsize = __int_as_float((127 - ::min(CAST_STACK_DEPTH - rlevel, 13)) << 23);
             float4 color; // dummy
             float3 normal;
             lookupVoxelColorNormal(color, normal, castRes, stack);

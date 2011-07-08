@@ -17,6 +17,7 @@
 #pragma once
 #include "gui/Image.hpp"
 #include "base/Hash.hpp"
+#include "base/Thread.hpp"
 
 namespace FW
 {
@@ -27,8 +28,10 @@ class Texture
 private:
     struct Data
     {
-        String      id;
         S32         refCount;
+        Spinlock    refCountLock;
+
+        String      id;
         bool        isInHash;
         Image*      image;
         GLuint      glTexture;
@@ -55,7 +58,7 @@ public:
 
     GLuint          getGLTexture    (const ImageFormat::ID desiredFormat = ImageFormat::ID_Max, bool generateMipmaps = true) const;
     CUarray         getCudaArray    (const ImageFormat::ID desiredFormat = ImageFormat::ID_Max) const;
-    Texture         getMipLevel     (int level, bool generateByGL = true) const;
+    Texture         getMipLevel     (int level) const;
 
     Texture&        operator=       (const Texture& other)                  { set(other); return *this; }
     bool            operator==      (const Texture& other) const            { return (m_data == other.m_data); }
@@ -64,7 +67,7 @@ public:
 private:
     static Data*    findData        (const String& id);
     static Data*    createData      (const String& id);
-    static void     referData       (Data* data)                            { FW_ASSERT(data); data->refCount++; }
+    static void     referData       (Data* data);
     static void     unreferData     (Data* data);
 
 private:

@@ -31,8 +31,8 @@ static const char* const    s_windowClassName   = "FrameworkWindowClass";
 
 //------------------------------------------------------------------------
 
-bool            Window::s_inited    = false;
-Array<Window*>* Window::s_open      = NULL;
+bool            Window::s_inited        = false;
+Array<Window*>* Window::s_open          = NULL;
 bool            Window::s_ignoreRepaint = false;
 
 //------------------------------------------------------------------------
@@ -81,9 +81,9 @@ void Window::setTitle(const String& title)
 {
     if (m_title != title)
     {
-    m_title = title;
-    SetWindowText(m_hwnd, title.getPtr());
-}
+        m_title = title;
+        SetWindowText(m_hwnd, title.getPtr());
+    }
 }
 
 //------------------------------------------------------------------------
@@ -226,9 +226,9 @@ void Window::repaintNow(void)
             s_ignoreRepaint = false;
             if (m_prevSize != size)
             {
-            m_prevSize = size;
-            postEvent(createSimpleEvent(EventType_Resize));
-        }
+                m_prevSize = size;
+                postEvent(createSimpleEvent(EventType_Resize));
+            }
             postEvent(createSimpleEvent(EventType_PrePaint));
             postEvent(createSimpleEvent(EventType_Paint));
             postEvent(createSimpleEvent(EventType_PostPaint));
@@ -268,6 +268,14 @@ void Window::removeListener(Listener* listener)
 
     m_listeners.removeItem(listener);
     listener->handleEvent(createSimpleEvent(EventType_RemoveListener));
+}
+
+//------------------------------------------------------------------------
+
+void Window::removeListeners(void)
+{
+    while (m_listeners.getSize())
+        removeListener(m_listeners.getLast());
 }
 
 //------------------------------------------------------------------------

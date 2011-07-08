@@ -53,7 +53,9 @@ public:
     void                setSurfRef          (const String& name, CUarray cudaArray);
 
     void                launchKernel        (CUfunction kernel, const Vec2i& blockSize, const Vec2i& gridSize, bool async = false, CUstream stream = NULL);
+    void                launchKernel        (CUfunction kernel, const Vec2i& blockSize, int numBlocks, bool async = false, CUstream stream = NULL) { launchKernel(kernel, blockSize, selectGridSize(numBlocks), async, stream); }
     F32                 launchKernelTimed   (CUfunction kernel, const Vec2i& blockSize, const Vec2i& gridSize, bool async = false, CUstream stream = NULL, bool yield = true);
+    F32                 launchKernelTimed   (CUfunction kernel, const Vec2i& blockSize, int numBlocks, bool async = false, CUstream stream = NULL) { return launchKernelTimed(kernel, blockSize, selectGridSize(numBlocks), async, stream); }
 
     static void         staticInit          (void);
     static void         staticDeinit        (void);
@@ -72,6 +74,7 @@ public:
 private:
     static CUdevice     selectDevice        (void);
     static void         printDeviceInfo     (CUdevice device);
+    static Vec2i        selectGridSize      (int numBlocks);
 
 private:
                         CudaModule          (const CudaModule&); // forbidden

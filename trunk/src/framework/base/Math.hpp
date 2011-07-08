@@ -95,6 +95,7 @@ FW_CUDA_FUNC F32    scale           (F32 a, int b)  { return a * exp2(b); }
 FW_CUDA_FUNC int    popc8           (U32 mask);
 FW_CUDA_FUNC int    popc16          (U32 mask);
 FW_CUDA_FUNC int    popc32          (U32 mask);
+FW_CUDA_FUNC int    popc64          (U64 mask);
 
 FW_CUDA_FUNC F32    fastClamp       (F32 v, F32 lo, F32 hi) { return fastMin(fastMax(v, lo), hi); }
 FW_CUDA_FUNC F64    fastClamp       (F64 v, F64 lo, F64 hi) { return fastMin(fastMax(v, lo), hi); }
@@ -278,6 +279,7 @@ public:
 
     FW_CUDA_FUNC    Vec2i           getXY       (void) const                { return Vec2i(x, y); }
     FW_CUDA_FUNC    Vec3i           getXYZ      (void) const                { return Vec3i(x, y, z); }
+    FW_CUDA_FUNC    Vec3i           getXYW      (void) const                { return Vec3i(x, y, w); }
 
     template <class V> FW_CUDA_FUNC Vec4i(const VectorBase<S32, 4, V>& v) { set(v); }
     template <class V> FW_CUDA_FUNC Vec4i& operator=(const VectorBase<S32, 4, V>& v) { set(v); return *this; }
@@ -350,6 +352,7 @@ public:
     FW_CUDA_FUNC    operator        Vec4i       (void) const                { return Vec4i((S32)x, (S32)y, (S32)z, (S32)w); }
     FW_CUDA_FUNC    Vec2f           getXY       (void) const                { return Vec2f(x, y); }
     FW_CUDA_FUNC    Vec3f           getXYZ      (void) const                { return Vec3f(x, y, z); }
+    FW_CUDA_FUNC    Vec3f           getXYW      (void) const                { return Vec3f(x, y, w); }
 
 #if !FW_CUDA
     static Vec4f    fromABGR        (U32 abgr);
@@ -433,6 +436,7 @@ public:
     FW_CUDA_FUNC    operator        Vec4f       (void) const                { return Vec4f((F32)x, (F32)y, (F32)z, (F32)w); }
     FW_CUDA_FUNC    Vec2d           getXY       (void) const                { return Vec2d(x, y); }
     FW_CUDA_FUNC    Vec3d           getXYZ      (void) const                { return Vec3d(x, y, z); }
+    FW_CUDA_FUNC    Vec3d           getXYW      (void) const                { return Vec3d(x, y, w); }
 
     template <class V> FW_CUDA_FUNC Vec4d(const VectorBase<F64, 4, V>& v) { set(v); }
     template <class V> FW_CUDA_FUNC Vec4d& operator=(const VectorBase<F64, 4, V>& v) { set(v); return *this; }
@@ -463,10 +467,10 @@ template <class T, int L, class S, class V> FW_CUDA_FUNC T dot(const VectorBase<
 
 FW_CUDA_FUNC Vec2f  perpendicular   (const Vec2f& v)                    { return v.perpendicular(); }
 FW_CUDA_FUNC Vec2d  perpendicular   (const Vec2d& v)                    { return v.perpendicular(); }
-FW_CUDA_FUNC F32    cross   (const Vec2f& a, const Vec2f& b)    { return a.cross(b); }
-FW_CUDA_FUNC F64    cross   (const Vec2d& a, const Vec2d& b)    { return a.cross(b); }
-FW_CUDA_FUNC Vec3f  cross   (const Vec3f& a, const Vec3f& b)    { return a.cross(b); }
-FW_CUDA_FUNC Vec3d  cross   (const Vec3d& a, const Vec3d& b)    { return a.cross(b); }
+FW_CUDA_FUNC F32    cross           (const Vec2f& a, const Vec2f& b)    { return a.cross(b); }
+FW_CUDA_FUNC F64    cross           (const Vec2d& a, const Vec2d& b)    { return a.cross(b); }
+FW_CUDA_FUNC Vec3f  cross           (const Vec3f& a, const Vec3f& b)    { return a.cross(b); }
+FW_CUDA_FUNC Vec3d  cross           (const Vec3d& a, const Vec3d& b)    { return a.cross(b); }
 
 #define MINMAX(T) \
     FW_CUDA_FUNC T min(const T& a, const T& b)                          { return a.min(b); } \
@@ -519,7 +523,7 @@ public:
     FW_CUDA_FUNC    void            setIdentity (void)                      { setZero(); for (int i = 0; i < L; i++) get(i, i) = (T)1; }
 
 #if !FW_CUDA
-    void            print       (void) const;
+                    void            print       (void) const;
 #endif
 
     FW_CUDA_FUNC    T               det         (void) const;
@@ -682,6 +686,78 @@ public:
 
 //------------------------------------------------------------------------
 
+class Mat2d : public MatrixBase<F64, 2, Mat2d>
+{
+public:
+    FW_CUDA_FUNC                    Mat2d       (void)                      { setIdentity(); }
+    FW_CUDA_FUNC                    Mat2d       (const Mat2f& a)            { for (int i = 0; i < 2 * 2; i++) set(i, (F64)a.get(i)); }
+    FW_CUDA_FUNC    explicit        Mat2d       (F64 a)                     { set(a); }
+
+    FW_CUDA_FUNC    const F64*      getPtr      (void) const                { return &m00; }
+    FW_CUDA_FUNC    F64*            getPtr      (void)                      { return &m00; }
+    static FW_CUDA_FUNC Mat2d       fromPtr     (const F64* ptr)            { Mat2d v; v.set(ptr); return v; }
+
+    FW_CUDA_FUNC    operator        Mat2f       (void) const                { Mat2f r; for (int i = 0; i < 2 * 2; i++) r.set(i, (F32)get(i)); return r; }
+
+    template <class V> FW_CUDA_FUNC Mat2d(const MatrixBase<F64, 2, V>& v) { set(v); }
+    template <class V> FW_CUDA_FUNC Mat2d& operator=(const MatrixBase<F64, 2, V>& v) { set(v); return *this; }
+
+public:
+    F64             m00, m10;
+    F64             m01, m11;
+};
+
+//------------------------------------------------------------------------
+
+class Mat3d : public MatrixBase<F64, 3, Mat3d>
+{
+public:
+    FW_CUDA_FUNC                    Mat3d       (void)                      { setIdentity(); }
+    FW_CUDA_FUNC                    Mat3d       (const Mat3f& a)            { for (int i = 0; i < 3 * 3; i++) set(i, (F64)a.get(i)); }
+    FW_CUDA_FUNC    explicit        Mat3d       (F64 a)                     { set(a); }
+
+    FW_CUDA_FUNC    const F64*      getPtr      (void) const                { return &m00; }
+    FW_CUDA_FUNC    F64*            getPtr      (void)                      { return &m00; }
+    static FW_CUDA_FUNC Mat3d       fromPtr     (const F64* ptr)            { Mat3d v; v.set(ptr); return v; }
+
+    FW_CUDA_FUNC    operator        Mat3f       (void) const                { Mat3f r; for (int i = 0; i < 3 * 3; i++) r.set(i, (F32)get(i)); return r; }
+
+    template <class V> FW_CUDA_FUNC Mat3d(const MatrixBase<F64, 3, V>& v) { set(v); }
+    template <class V> FW_CUDA_FUNC Mat3d& operator=(const MatrixBase<F64, 3, V>& v) { set(v); return *this; }
+
+public:
+    F64             m00, m10, m20;
+    F64             m01, m11, m21;
+    F64             m02, m12, m22;
+};
+
+//------------------------------------------------------------------------
+
+class Mat4d : public MatrixBase<F64, 4, Mat4d>
+{
+public:
+    FW_CUDA_FUNC                    Mat4d       (void)                      { setIdentity(); }
+    FW_CUDA_FUNC                    Mat4d       (const Mat4f& a)            { for (int i = 0; i < 4 * 4; i++) set(i, (F64)a.get(i)); }
+    FW_CUDA_FUNC    explicit        Mat4d       (F64 a)                     { set(a); }
+
+    FW_CUDA_FUNC    const F64*      getPtr      (void) const                { return &m00; }
+    FW_CUDA_FUNC    F64*            getPtr      (void)                      { return &m00; }
+    static FW_CUDA_FUNC Mat4d       fromPtr     (const F64* ptr)            { Mat4d v; v.set(ptr); return v; }
+
+    FW_CUDA_FUNC    operator        Mat4f       (void) const                { Mat4f r; for (int i = 0; i < 4 * 4; i++) r.set(i, (F32)get(i)); return r; }
+
+    template <class V> FW_CUDA_FUNC Mat4d(const MatrixBase<F64, 4, V>& v) { set(v); }
+    template <class V> FW_CUDA_FUNC Mat4d& operator=(const MatrixBase<F64, 4, V>& v) { set(v); return *this; }
+
+public:
+    F64             m00, m10, m20, m30;
+    F64             m01, m11, m21, m31;
+    F64             m02, m12, m22, m32;
+    F64             m03, m13, m23, m33;
+};
+
+//------------------------------------------------------------------------
+
 template <class T, int L, class S> FW_CUDA_FUNC Matrix<T, L> outerProduct(const VectorBase<T, L, S>& a, const VectorBase<T, L, S>& b);
 
 template <class T, int L, class S> FW_CUDA_FUNC T det           (const MatrixBase<T, L, S>& v)  { return v.det(); }
@@ -739,6 +815,17 @@ FW_CUDA_FUNC int popc32(U32 mask)
     result += c_popc8LUT[(mask >> 8) & 0xffu];
     result += c_popc8LUT[(mask >> 16) & 0xffu];
     result += c_popc8LUT[mask >> 24];
+    return result;
+}
+
+FW_CUDA_FUNC int popc64(U64 mask)
+{
+    U32 lo = (U32)mask;
+    U32 hi = (U32)(mask >> 32);
+    int result = c_popc8LUT[lo & 0xffu] + c_popc8LUT[hi & 0xffu];
+    result += c_popc8LUT[(lo >> 8) & 0xffu] + c_popc8LUT[(hi >> 8) & 0xffu];
+    result += c_popc8LUT[(lo >> 16) & 0xffu] + c_popc8LUT[(hi >> 16) & 0xffu];
+    result += c_popc8LUT[lo >> 24] + c_popc8LUT[hi >> 24];
     return result;
 }
 

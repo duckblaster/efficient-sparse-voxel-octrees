@@ -53,8 +53,28 @@ struct ProfileTimer
 };
 
 //------------------------------------------------------------------------
+// Hack to guard against the fact that s_lock may be accessed by malloc()
+// and free() before it has been initialized and/or after it has been
+// destroyed.
 
-static Spinlock                         s_lock;
+class SafeSpinlock : public Spinlock
+{
+public:
+                SafeSpinlock    (void) { s_inited = true; }
+                ~SafeSpinlock   (void) { s_inited = false; }
+
+    void        enter           (void) { if (s_inited) Spinlock::enter(); }
+    void        leave           (void) { if (s_inited) Spinlock::leave(); }
+
+private:
+    static bool s_inited;
+};
+
+bool SafeSpinlock::s_inited = false;
+
+//------------------------------------------------------------------------
+
+static SafeSpinlock                     s_lock;
 static size_t                           s_memoryUsed        = 0;
 static bool                             s_hasFailed         = false;
 static bool                             s_discardEvents     = false;
@@ -103,6 +123,7 @@ void* FW::malloc(size_t size)
     alloc->next->prev   = alloc;
     alloc->size         = size;
     alloc->ownerID      = "Uncategorized";
+    s_memoryUsed        += size;
 
     if (!s_memPushingOwner)
     {
@@ -117,9 +138,12 @@ void* FW::malloc(size_t size)
     void* ptr = ::malloc(size);
     if (!ptr)
         fail("Out of memory!");
+
+    s_lock.enter();
+    s_memoryUsed += _msize(ptr);
+    s_lock.leave();
 #endif
 
-    s_memoryUsed += size;
     return ptr;
 }
 
@@ -142,7 +166,10 @@ void FW::free(void* ptr)
     s_lock.leave();
 
 #else
+    s_lock.enter();
     s_memoryUsed -= _msize(ptr);
+    s_lock.leave();
+
     ::free(ptr);
 #endif
 }
@@ -163,9 +190,8 @@ void* FW::realloc(void* ptr, size_t size)
     }
 
 #if FW_MEM_DEBUG
-    size_t oldSize = ((AllocHeader*)ptr - 1)->size;
     void* newPtr = FW::malloc(size);
-    memcpy(newPtr, ptr, min(size, oldSize));
+    memcpy(newPtr, ptr, min(size, ((AllocHeader*)ptr - 1)->size));
     FW::free(ptr);
 
 #else
@@ -173,9 +199,12 @@ void* FW::realloc(void* ptr, size_t size)
     void* newPtr = ::realloc(ptr, size);
     if (!newPtr)
         fail("Out of memory!");
+
+    s_lock.enter();
+    s_memoryUsed += _msize(newPtr) - oldSize;
+    s_lock.leave();
 #endif
 
-    s_memoryUsed += size - oldSize;
     return newPtr;
 }
 
@@ -581,23 +610,23 @@ void FW::profileEnd(bool printResults)
 
     if (printResults)
     {
-    printf("\n");
-    Array<Vec2i> stack(Vec2i(0, 0));
-    while (stack.getSize())
-    {
-        Vec2i entry = stack.removeLast();
-        const ProfileTimer& timer = s_profileTimers[entry.x];
-        for (int i = timer.children.getSize() - 1; i >= 0; i--)
-            stack.add(Vec2i(timer.children[i], entry.y + 2));
+        printf("\n");
+        Array<Vec2i> stack(Vec2i(0, 0));
+        while (stack.getSize())
+        {
+            Vec2i entry = stack.removeLast();
+            const ProfileTimer& timer = s_profileTimers[entry.x];
+            for (int i = timer.children.getSize() - 1; i >= 0; i--)
+                stack.add(Vec2i(timer.children[i], entry.y + 2));
 
-        printf("%*s%-*s%-8.3f",
-            entry.y, "",
-            32 - entry.y, timer.id.getPtr(),
-            timer.timer.getTotal());
+            printf("%*s%-*s%-8.3f",
+                entry.y, "",
+                32 - entry.y, timer.id.getPtr(),
+                timer.timer.getTotal());
 
-        printf("%.0f%%\n", timer.timer.getTotal() / s_profileTimers[0].timer.getTotal() * 100.0f);
-    }
-    printf("\n");
+            printf("%.0f%%\n", timer.timer.getTotal() / s_profileTimers[0].timer.getTotal() * 100.0f);
+        }
+        printf("\n");
     }
 
     // Clean up.

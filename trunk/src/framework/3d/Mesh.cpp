@@ -206,7 +206,7 @@ void MeshBase::resetVertices(int num)
 
     m_vertices.reset(num * m_stride);
     if (num > m_numVertices)
-        memset(m_vertices.getPtr(m_numVertices * m_stride), 0, num * m_stride);
+        memset(m_vertices.getPtr(m_numVertices * m_stride), 0, (num - m_numVertices) * m_stride);
     m_numVertices = num;
     freeVBO();
 }
@@ -353,17 +353,19 @@ void MeshBase::setGLAttrib(GLContext* gl, int attrib, int loc)
 
 //------------------------------------------------------------------------
 
-void MeshBase::draw(GLContext* gl, const Mat4f& posToCamera, const Mat4f& projection)
+void MeshBase::draw(GLContext* gl, const Mat4f& posToCamera, const Mat4f& projection, GLContext::Program* prog, bool gouraud)
 {
     FW_ASSERT(gl);
-
-    // Create program.
-
-    static const char* progId = "MeshBase::draw";
-    GLContext::Program* prog = gl->getProgram(progId);
+    const char* progId = (!gouraud) ? "MeshBase::draw_generic" : "MeshBase::draw_gouraud";
     if (!prog)
+        prog = gl->getProgram(progId);
+
+    // Generic shading.
+
+    if (!prog && !gouraud)
     {
         prog = new GLContext::Program(
+            "#version 120\n"
             FW_GL_SHADER_SOURCE(
                 uniform mat4 posToClip;
                 uniform mat4 posToCamera;
@@ -372,9 +374,9 @@ void MeshBase::draw(GLContext* gl, const Mat4f& posToCamera, const Mat4f& projec
                 attribute vec3 normalAttrib;
                 attribute vec4 colorAttrib;
                 attribute vec2 texCoordAttrib;
-                varying vec3 positionVarying;
-                varying vec3 normalVarying;
-                varying vec4 colorVarying;
+                centroid varying vec3 positionVarying;
+                centroid varying vec3 normalVarying;
+                centroid varying vec4 colorVarying;
                 varying vec2 texCoordVarying;
 
                 void main()
@@ -387,6 +389,7 @@ void MeshBase::draw(GLContext* gl, const Mat4f& posToCamera, const Mat4f& projec
                     texCoordVarying = texCoordAttrib;
                 }
             ),
+            "#version 120\n"
             FW_GL_SHADER_SOURCE(
                 uniform bool hasNormals;
                 uniform bool hasDiffuseTexture;
@@ -396,9 +399,9 @@ void MeshBase::draw(GLContext* gl, const Mat4f& posToCamera, const Mat4f& projec
                 uniform float glossiness;
                 uniform sampler2D diffuseSampler;
                 uniform sampler2D alphaSampler;
-                varying vec3 positionVarying;
-                varying vec3 normalVarying;
-                varying vec4 colorVarying;
+                centroid varying vec3 positionVarying;
+                centroid varying vec3 normalVarying;
+                centroid varying vec4 colorVarying;
                 varying vec2 texCoordVarying;
 
                 void main()
@@ -407,12 +410,12 @@ void MeshBase::draw(GLContext* gl, const Mat4f& posToCamera, const Mat4f& projec
                     vec3 specularColor = specularUniform;
 
                     if (hasDiffuseTexture)
-                        diffuseColor = texture2D(diffuseSampler, texCoordVarying);
+                        diffuseColor.rgb = texture2D(diffuseSampler, texCoordVarying).rgb;
 
                     if (hasAlphaTexture)
-                        diffuseColor.w = texture2D(alphaSampler, texCoordVarying).g;
+                        diffuseColor.a = texture2D(alphaSampler, texCoordVarying).g;
 
-                    if (diffuseColor.w <= 0.5)
+                    if (diffuseColor.a <= 0.5)
                         discard;
 
                     vec3 I = normalize(positionVarying);
@@ -422,7 +425,47 @@ void MeshBase::draw(GLContext* gl, const Mat4f& posToCamera, const Mat4f& projec
                     gl_FragColor = vec4(diffuseColor.rgb * diffuseCoef + specularColor * specularCoef, diffuseColor.a);
                 }
             ));
-        gl->setProgram(progId, prog);
+    }
+
+    // Gouraud shading.
+
+    if (!prog && gouraud)
+    {
+        prog = new GLContext::Program(
+            "#version 120\n"
+            FW_GL_SHADER_SOURCE(
+                uniform mat4 posToClip;
+                uniform mat4 posToCamera;
+                uniform mat3 normalToCamera;
+                uniform bool hasNormals;
+                uniform vec4 diffuseUniform;
+                uniform vec3 specularUniform;
+                uniform float glossiness;
+                attribute vec3 positionAttrib;
+                attribute vec3 normalAttrib;
+                attribute vec4 colorAttrib;
+                centroid varying vec4 colorVarying;
+
+                void main()
+                {
+                    vec4 pos = vec4(positionAttrib, 1.0);
+                    gl_Position = posToClip * pos;
+                    vec3 I = normalize((posToCamera * pos).xyz);
+                    vec3 N = normalize(normalToCamera * normalAttrib);
+                    float diffuseCoef = (hasNormals) ? max(-dot(I, N), 0.0) * 0.75 + 0.25 : 1.0;
+                    float specularCoef = (hasNormals) ? pow(max(-dot(I, reflect(I, N)), 0.0), glossiness) : 0.0;
+                    vec4 diffuseColor = diffuseUniform * colorAttrib;
+                    colorVarying = vec4(diffuseColor.rgb * diffuseCoef + specularUniform * specularCoef, diffuseColor.a);
+                }
+            ),
+            "#version 120\n"
+            FW_GL_SHADER_SOURCE(
+                centroid varying vec4 colorVarying;
+                void main()
+                {
+                    gl_FragColor = colorVarying;
+                }
+            ));
     }
 
     // Find mesh attributes.
@@ -436,6 +479,7 @@ void MeshBase::draw(GLContext* gl, const Mat4f& posToCamera, const Mat4f& projec
 
     // Setup uniforms.
 
+    gl->setProgram(progId, prog);
     prog->use();
     gl->setUniform(prog->getUniformLoc("posToClip"), projection * posToCamera);
     gl->setUniform(prog->getUniformLoc("posToCamera"), posToCamera);
@@ -878,6 +922,144 @@ void MeshBase::simplify(F32 maxError)
             else if (j != posAttrib)
                 v *= coef;
             setVertexAttrib(i, j, v);
+        }
+    }
+}
+
+//------------------------------------------------------------------------
+
+void MeshBase::clean(void)
+{
+    // Remove degenerate triangles and empty submeshes.
+
+    int submeshOut = 0;
+    for (int submeshIn = 0; submeshIn < numSubmeshes(); submeshIn++)
+    {
+        Array<Vec3i>& inds = mutableIndices(submeshIn);
+        int indOut = 0;
+        for (int i = 0; i < inds.getSize(); i++)
+        {
+            const Vec3i& v = inds[i];
+            if (v.x != v.y && v.x != v.z && v.y != v.z)
+                inds[indOut++] = v;
+        }
+
+        if (indOut)
+        {
+            inds.resize(indOut);
+            if (submeshOut != submeshIn)
+            {
+                material(submeshOut) = material(submeshIn);
+                mutableIndices(submeshOut) = inds;
+            }
+            mutableIndices(submeshOut).compact();
+            submeshOut++;
+        }
+    }
+    resizeSubmeshes(submeshOut);
+
+    // Tag referenced vertices.
+
+    Array<U8> vertUsed;
+    vertUsed.reset(numVertices());
+    memset(vertUsed.getPtr(), 0, vertUsed.getNumBytes());
+
+    for (int submeshIn = 0; submeshIn < numSubmeshes(); submeshIn++)
+    {
+        const Array<Vec3i>& inds = indices(submeshIn);
+        for (int i = 0; i < inds.getSize(); i++)
+            for (int j = 0; j < 3; j++)
+                vertUsed[inds[i][j]] = 1;
+    }
+
+    // Remap vertices.
+
+    Array<S32> vertRemap;
+    vertRemap.reset(numVertices());
+    memset(vertRemap.getPtr(), -1, vertRemap.getNumBytes());
+    U8* vertPtr = getMutableVertexPtr();
+    int vertStride = vertexStride();
+
+    int vertOut = 0;
+    for (int vertIn = 0; vertIn < vertUsed.getSize(); vertIn++)
+    {
+        if (!vertUsed[vertIn])
+            continue;
+
+        vertRemap[vertIn] = vertOut;
+        if (vertOut != vertIn)
+            memcpy(vertPtr + vertOut * vertStride, vertPtr + vertIn * vertStride, vertStride);
+        vertOut++;
+    }
+    resizeVertices(vertOut);
+
+    // Update index buffers.
+
+    for (int submeshIdx = 0; submeshIdx < numSubmeshes(); submeshIdx++)
+    {
+        Array<Vec3i>& inds = mutableIndices(submeshIdx);
+        for (int i = 0; i < inds.getSize(); i++)
+            for (int j = 0; j < 3; j++)
+                inds[i][j] = vertRemap[inds[i][j]];
+    }
+}
+
+//------------------------------------------------------------------------
+
+void MeshBase::dupVertsPerSubmesh(void)
+{
+    // Find shared vertices and remap indices.
+
+    int num = numVertices();
+    Array<Vec2i> remap;
+    Array<S32> dup;
+    remap.reset(num);
+    memset(remap.getPtr(), -1, remap.getNumBytes());
+
+    for (int submeshIdx = 0; submeshIdx < numSubmeshes(); submeshIdx++)
+    {
+        Array<Vec3i>& inds = mutableIndices(submeshIdx);
+        for (int i = 0; i < inds.getSize(); i++)
+        for (int j = 0; j < 3; j++)
+        {
+            int v = inds[i][j];
+            if (remap[v].x != submeshIdx)
+            {
+                remap[v].x = submeshIdx;
+                if (remap[v].y == -1)
+                    remap[v].y = v;
+                else
+                {
+                    remap[v].y = num + dup.getSize();
+                    dup.add(v);
+                }
+            }
+            inds[i][j] = remap[v].y;
+        }
+    }
+
+    // Duplicate vertices.
+
+    resizeVertices(num + dup.getSize());
+    U8* vertPtr = getMutableVertexPtr();
+    int vertStride = vertexStride();
+
+    for (int i = 0; i < dup.getSize(); i++)
+        memcpy(vertPtr + (num + i) * vertStride, vertPtr + dup[i] * vertStride, vertStride);
+}
+
+//------------------------------------------------------------------------
+
+void MeshBase::fixMaterialColors(void)
+{
+    for (int submeshIdx = 0; submeshIdx < numSubmeshes(); submeshIdx++)
+    {
+        Material& mat = material(submeshIdx);
+        Texture tex = mat.textures[TextureType_Diffuse];
+        if (tex.exists())
+        {
+            Vec4f avg = tex.getMipLevel(64).getImage()->getVec4f(0);
+            mat.diffuse = Vec4f(avg.getXYZ(), mat.diffuse.w);
         }
     }
 }

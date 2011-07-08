@@ -16,6 +16,7 @@
  
 #pragma once
 #include "base/Thread.hpp"
+#include "base/Deque.hpp"
 
 namespace FW
 {
@@ -119,13 +120,11 @@ private:
     static S32              s_desiredThreads;
 
     static Monitor*         s_monitor;
-    static Array<Task>      s_pending;
-    static S32              s_nextPending;
+    static Deque<Task>      s_pending;
     static S32              s_numThreads;
 
     S32                     m_numTasks;
-    Array<Task>             m_finished;
-    S32                     m_nextFinished;
+    Deque<Task>             m_finished;
 };
 
 //------------------------------------------------------------------------

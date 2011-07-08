@@ -366,7 +366,7 @@ __device__ U32 processPrimaryRay(volatile Ray& ray, volatile F32& vSizeMultiplie
 #ifdef JITTER_LOD
     vSize *= vSizeMultiplier;
 #endif
-    float blurRadius = max(vSize / pSize * getInput().maxVoxelSize, 1.0f);
+    float blurRadius = ::max(vSize / pSize * getInput().maxVoxelSize, 1.0f);
 
     // Encode in the alpha channel.
 
@@ -480,7 +480,7 @@ extern "C" __global__ void kernel(void)
                 F32 size = (F32)(1 << castRes.stackPtr) / (F32)(1 << CAST_STACK_DEPTH);
                 castRes.t -= size / length(get(aux.ray.dir)) * 0.5f;
             }
-            *(float*)aux.framePtr = max(castRes.t, 0.0f);
+            *(float*)aux.framePtr = ::max(castRes.t, 0.0f);
         } else
         {
 #ifdef JITTER_LOD
@@ -518,7 +518,7 @@ extern "C" __global__ void kernel(void)
                     U32 resa1 = (&aux)[1].aa.alpha;
                     U32 resa2 = (&aux)[2].aa.alpha;
                     U32 resa3 = (&aux)[3].aa.alpha;
-                    U32 resa = min(min(resa0, resa1), min(resa2, resa3));;
+                    U32 resa = ::min(::min(resa0, resa1), ::min(resa2, resa3));;
 
                     // combine min alpha and avg color
                     *aux.framePtr = (resa & 0xff000000) | resc;
@@ -679,7 +679,7 @@ extern "C" __global__ void blurKernel(void)
         float4 c = tex1Dfetch(texTempFrameIn, x + __mul24(cx, y));
         float rad2 = exp2f(c.w * (255.f / 32.f)) * BLUR_FACTOR;
         if (w > 0.f)
-            rad = min(rad, rad2);
+            rad = ::min(rad, rad2);
 
         w *= fminf(fmaxf(rad - d, 0.f), 1.f);
 

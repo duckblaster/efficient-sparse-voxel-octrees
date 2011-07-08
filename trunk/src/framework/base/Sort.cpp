@@ -84,34 +84,34 @@ int FW::median3(int low, int high, void* data, SortCompareFunc compareFunc)
 //------------------------------------------------------------------------
 
 int FW::partition(int low, int high, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc)
-        {
-        // Select pivot using median-3, and hide it in the highest entry.
+{
+    // Select pivot using median-3, and hide it in the highest entry.
 
-        swapFunc(data, median3(low, high, data, compareFunc), high - 1);
+    swapFunc(data, median3(low, high, data, compareFunc), high - 1);
 
-        // Partition data.
+    // Partition data.
 
-        int i = low - 1;
-        int j = high - 1;
-        for (;;)
-        {
-            do
-                i++;
-            while (compareFunc(data, i, high - 1) < 0);
-            do
-                j--;
-            while (compareFunc(data, j, high - 1) > 0);
+    int i = low - 1;
+    int j = high - 1;
+    for (;;)
+    {
+        do
+            i++;
+        while (compareFunc(data, i, high - 1) < 0);
+        do
+            j--;
+        while (compareFunc(data, j, high - 1) > 0);
 
-            FW_ASSERT(i >= low && j >= low && i < high && j < high);
-            if (i >= j)
-                break;
+        FW_ASSERT(i >= low && j >= low && i < high && j < high);
+        if (i >= j)
+            break;
 
-            swapFunc(data, i, j);
-        }
+        swapFunc(data, i, j);
+    }
 
-        // Restore pivot.
+    // Restore pivot.
 
-        swapFunc(data, i, high - 1);
+    swapFunc(data, i, high - 1);
     return i;
 }
 
@@ -196,7 +196,7 @@ void FW::sort(int start, int end, void* data, SortCompareFunc compareFunc, SortS
     if (end - start < 2)
         return;
 
-        qsort(start, end, data, compareFunc, swapFunc);
+    qsort(start, end, data, compareFunc, swapFunc);
 }
 
 //------------------------------------------------------------------------
@@ -224,6 +224,34 @@ void FW::sortMulticore(int start, int end, void* data, SortCompareFunc compareFu
 
 //------------------------------------------------------------------------
 
+int FW::compareU32(void* data, int idxA, int idxB)
+{
+    U32 a = ((U32*)data)[idxA];
+    U32 b = ((U32*)data)[idxB];
+    return (a < b) ? -1 : (a > b) ? 1 : 0;
+}
+
+void FW::swapU32(void* data, int idxA, int idxB)
+{
+    swap(((U32*)data)[idxA], ((U32*)data)[idxB]);
+}
+
+//------------------------------------------------------------------------
+
+int FW::compareU64(void* data, int idxA, int idxB)
+{
+    U64 a = ((U64*)data)[idxA];
+    U64 b = ((U64*)data)[idxB];
+    return (a < b) ? -1 : (a > b) ? 1 : 0;
+}
+
+void FW::swapU64(void* data, int idxA, int idxB)
+{
+    swap(((U64*)data)[idxA], ((U64*)data)[idxB]);
+}
+
+//------------------------------------------------------------------------
+
 int FW::compareS32(void* data, int idxA, int idxB)
 {
     S32 a = ((S32*)data)[idxA];
@@ -231,11 +259,23 @@ int FW::compareS32(void* data, int idxA, int idxB)
     return (a < b) ? -1 : (a > b) ? 1 : 0;
 }
 
-//------------------------------------------------------------------------
-
 void FW::swapS32(void* data, int idxA, int idxB)
 {
     swap(((S32*)data)[idxA], ((S32*)data)[idxB]);
+}
+
+//------------------------------------------------------------------------
+
+int FW::compareS64(void* data, int idxA, int idxB)
+{
+    S64 a = ((S64*)data)[idxA];
+    S64 b = ((S64*)data)[idxB];
+    return (a < b) ? -1 : (a > b) ? 1 : 0;
+}
+
+void FW::swapS64(void* data, int idxA, int idxB)
+{
+    swap(((S64*)data)[idxA], ((S64*)data)[idxB]);
 }
 
 //------------------------------------------------------------------------
@@ -247,11 +287,23 @@ int FW::compareF32(void* data, int idxA, int idxB)
     return (a < b) ? -1 : (a > b) ? 1 : 0;
 }
 
-//------------------------------------------------------------------------
-
 void FW::swapF32(void* data, int idxA, int idxB)
 {
     swap(((F32*)data)[idxA], ((F32*)data)[idxB]);
+}
+
+//------------------------------------------------------------------------
+
+int FW::compareF64(void* data, int idxA, int idxB)
+{
+    F64 a = ((F64*)data)[idxA];
+    F64 b = ((F64*)data)[idxB];
+    return (a < b) ? -1 : (a > b) ? 1 : 0;
+}
+
+void FW::swapF64(void* data, int idxA, int idxB)
+{
+    swap(((F64*)data)[idxA], ((F64*)data)[idxB]);
 }
 
 //------------------------------------------------------------------------

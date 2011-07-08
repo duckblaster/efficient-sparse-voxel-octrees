@@ -126,27 +126,27 @@ FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGLMapBufferObject,                
 // CUDA 2.2
 
 #if (CUDA_VERSION >= 2020)
-FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuDriverGetVersion,                     (int *driverVersion), (driverVersion))
-FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemHostAlloc,                         (void **pp, size_t bytesize, unsigned int Flags), (pp, bytesize, Flags))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuDriverGetVersion,                     (int* driverVersion), (driverVersion))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemHostAlloc,                         (void** pp, size_t bytesize, unsigned int Flags), (pp, bytesize, Flags))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuFuncGetAttribute,                     (int* pi, CUfunction_attribute attrib, CUfunction hfunc), (pi, attrib, hfunc))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuWGLGetDevice,                         (CUdevice* pDevice, HGPUNV hGpu), (pDevice, hGpu))
 #endif
 
 #if (CUDA_VERSION >= 2020 && CUDA_VERSION < 3020)
-FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemHostGetDevicePointer,              (CUdeviceptr *pdptr, void *p, unsigned int Flags), (pdptr, p, Flags))
-FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuTexRefSetAddress2D,                   (CUtexref hTexRef, const CUDA_ARRAY_DESCRIPTOR *desc, CUdeviceptr dptr, unsigned int Pitch), (hTexRef, desc, dptr, Pitch))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemHostGetDevicePointer,              (CUdeviceptr* pdptr, void* p, unsigned int Flags), (pdptr, p, Flags))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuTexRefSetAddress2D,                   (CUtexref hTexRef, const CUDA_ARRAY_DESCRIPTOR* desc, CUdeviceptr dptr, unsigned int Pitch), (hTexRef, desc, dptr, Pitch))
 #endif
 
 // CUDA 2.3
 
 #if (CUDA_VERSION >= 2030)
-FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemHostGetFlags,                      (unsigned int *pFlags, void *p), (pFlags, p))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemHostGetFlags,                      (unsigned int* pFlags, void* p), (pFlags, p))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGLSetBufferObjectMapFlags,            (GLuint buffer, unsigned int Flags), (buffer, Flags))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGLUnmapBufferObjectAsync,             (GLuint buffer, CUstream hStream), (buffer, hStream))
 #endif
 
 #if (CUDA_VERSION >= 2030 && CUDA_VERSION < 3020)
-FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGLMapBufferObjectAsync,               (CUdeviceptr *dptr, unsigned int *size,  GLuint buffer, CUstream hStream), (dptr, size, buffer, hStream))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGLMapBufferObjectAsync,               (CUdeviceptr* dptr, unsigned int* size,  GLuint buffer, CUstream hStream), (dptr, size, buffer, hStream))
 #endif
 
 // CUDA 3.0
@@ -154,13 +154,13 @@ FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGLMapBufferObjectAsync,           
 #if (CUDA_VERSION >= 3000)
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuFuncSetCacheConfig,                   (CUfunction hfunc, CUfunc_cache config), (hfunc, config))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGraphicsUnregisterResource,           (CUgraphicsResource resource), (resource))
-FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGraphicsSubResourceGetMappedArray,    (CUarray *pArray, CUgraphicsResource resource, unsigned int arrayIndex, unsigned int mipLevel), (pArray, resource, arrayIndex, mipLevel))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGraphicsSubResourceGetMappedArray,    (CUarray* pArray, CUgraphicsResource resource, unsigned int arrayIndex, unsigned int mipLevel), (pArray, resource, arrayIndex, mipLevel))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGraphicsResourceSetMapFlags,          (CUgraphicsResource resource, unsigned int flags), (resource, flags))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGraphicsMapResources,                 (unsigned int count, CUgraphicsResource* resources, CUstream hStream), (count, resources, hStream))
-FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGraphicsUnmapResources,               (unsigned int count, CUgraphicsResource *resources, CUstream hStream), (count, resources, hStream))
-FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGetExportTable,                       (const void **ppExportTable, const CUuuid *pExportTableId), (ppExportTable, pExportTableId))
-FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGraphicsGLRegisterBuffer,             (CUgraphicsResource *pCudaResource, GLuint buffer, unsigned int Flags), (pCudaResource, buffer, Flags))
-FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGraphicsGLRegisterImage,              (CUgraphicsResource *pCudaResource, GLuint image, GLenum target, unsigned int Flags), (pCudaResource, image, target, Flags))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGraphicsUnmapResources,               (unsigned int count, CUgraphicsResource* resources, CUstream hStream), (count, resources, hStream))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGetExportTable,                       (const void** ppExportTable, const CUuuid* pExportTableId), (ppExportTable, pExportTableId))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGraphicsGLRegisterBuffer,             (CUgraphicsResource* pCudaResource, GLuint buffer, unsigned int Flags), (pCudaResource, buffer, Flags))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuGraphicsGLRegisterImage,              (CUgraphicsResource* pCudaResource, GLuint image, GLenum target, unsigned int Flags), (pCudaResource, image, target, Flags))
 #endif
 
 #if (CUDA_VERSION >= 3000 && CUDA_VERSION < 3020)
@@ -229,12 +229,36 @@ FW_DLL_IMPORT_CUV2( CUresult,   CUDAAPI,    cuGraphicsResourceGetMappedPointer, 
 #endif
 
 #if (CUDA_VERSION >= 3020)
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuCtxGetCacheConfig,                    (CUfunc_cache* pconfig), (pconfig))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuCtxSetCacheConfig,                    (CUfunc_cache config), (config))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuCtxGetApiVersion,                     (CUcontext ctx, unsigned int* version), (ctx, version))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemsetD8Async,                        (CUdeviceptr dstDevice, unsigned char uc, size_t N, CUstream hStream), (dstDevice, uc, N, hStream))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemsetD16Async,                       (CUdeviceptr dstDevice, unsigned short us, size_t N, CUstream hStream), (dstDevice, us, N, hStream))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemsetD32Async,                       (CUdeviceptr dstDevice, unsigned int ui, size_t N, CUstream hStream), (dstDevice, ui, N, hStream))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemsetD2D8Async,                      (CUdeviceptr dstDevice, size_t dstPitch, unsigned char uc, size_t Width, size_t Height, CUstream hStream), (dstDevice, dstPitch, uc, Width, Height, hStream))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemsetD2D16Async,                     (CUdeviceptr dstDevice, size_t dstPitch, unsigned short us, size_t Width, size_t Height, CUstream hStream), (dstDevice, dstPitch, us, Width, Height, hStream))
 FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemsetD2D32Async,                     (CUdeviceptr dstDevice, size_t dstPitch, unsigned int ui, size_t Width, size_t Height, CUstream hStream), (dstDevice, dstPitch, ui, Width, Height, hStream))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuStreamWaitEvent,                      (CUstream hStream, CUevent hEvent, unsigned int Flags), (hStream, hEvent, Flags))
+#endif
+
+// CUDA 4.0
+
+#if (CUDA_VERSION >= 4000)
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuCtxSetCurrent,                        (CUcontext ctx), (ctx))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuCtxGetCurrent,                        (CUcontext* pctx), (pctx))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemHostRegister,                      (void* p, size_t bytesize, unsigned int Flags), (p, bytesize, Flags))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemHostUnregister,                    (void* p), (p))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemcpy,                               (CUdeviceptr dst, CUdeviceptr src, size_t ByteCount), (dst, src, ByteCount))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemcpyPeer,                           (CUdeviceptr dstDevice, CUcontext dstContext, CUdeviceptr srcDevice, CUcontext srcContext, size_t ByteCount), (dstDevice, dstContext, srcDevice, srcContext, ByteCount))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemcpy3DPeer,                         (const CUDA_MEMCPY3D_PEER* pCopy), (pCopy))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemcpyAsync,                          (CUdeviceptr dst, CUdeviceptr src, size_t ByteCount, CUstream hStream), (dst, src, ByteCount, hStream))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemcpyPeerAsync,                      (CUdeviceptr dstDevice, CUcontext dstContext, CUdeviceptr srcDevice, CUcontext srcContext, size_t ByteCount, CUstream hStream), (dstDevice, dstContext, srcDevice, srcContext, ByteCount, hStream))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuMemcpy3DPeerAsync,                    (const CUDA_MEMCPY3D_PEER* pCopy, CUstream hStream), (pCopy, hStream))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuPointerGetAttribute,                  (void* data, CUpointer_attribute attribute, CUdeviceptr ptr), (data, attribute, ptr))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuLaunchKernel,                         (CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void** kernelParams, void** extra), (f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ, sharedMemBytes, hStream, kernelParams, extra))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuDeviceCanAccessPeer,                  (int* canAccessPeer, CUdevice dev, CUdevice peerDev), (canAccessPeer, dev, peerDev))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuCtxEnablePeerAccess,                  (CUcontext peerContext, unsigned int Flags), (peerContext, Flags))
+FW_DLL_IMPORT_RETV( CUresult,   CUDAAPI,    cuCtxDisablePeerAccess,                 (CUcontext peerContext), (peerContext))
 #endif
 
 //------------------------------------------------------------------------
@@ -300,6 +324,10 @@ FW_DLL_DECLARE_VOID(void,       APIENTRY,   glWindowPos2i,                      
 FW_DLL_DECLARE_VOID(void,       APIENTRY,   glBindFragDataLocationEXT,              (GLuint program, GLuint color, const GLchar* name), (program, color, name))
 FW_DLL_DECLARE_VOID(void,       APIENTRY,   glBlitFramebuffer,                      (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter), (srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter))
 FW_DLL_DECLARE_VOID(void,       APIENTRY,   glRenderbufferStorageMultisample,       (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height), (target, samples, internalformat, width, height))
+FW_DLL_DECLARE_VOID(void,       APIENTRY,   glUniform1d,                            (GLint location, GLdouble x), (location, x))
+FW_DLL_DECLARE_VOID(void,       APIENTRY,   glTexRenderbufferNV,                    (GLenum target, GLuint renderbuffer), (target, renderbuffer))
+FW_DLL_DECLARE_VOID(void,       APIENTRY,   glRenderbufferStorageMultisampleCoverageNV,(GLenum target, GLsizei coverageSamples, GLsizei colorSamples, GLenum internalformat, GLsizei width, GLsizei height), (target, coverageSamples, colorSamples, internalformat, width, height))
+FW_DLL_DECLARE_VOID(void,       APIENTRY,   glGetRenderbufferParameterivEXT,        (GLenum target, GLenum pname, GLint* params), (target, pname, params))
 
 #endif
 

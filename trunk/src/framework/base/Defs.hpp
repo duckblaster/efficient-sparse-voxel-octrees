@@ -16,6 +16,8 @@
  
 #pragma once
 
+#pragma warning(disable:4530) // C++ exception handler used, but unwind semantics are not enabled.
+#include <new>
 #include <string.h>
 
 namespace FW
@@ -158,43 +160,35 @@ void            profileEnd      (bool printResults = true);
 //------------------------------------------------------------------------
 
 template <class T> FW_CUDA_FUNC void        swap    (T& a, T& b)                            { T t = a; a = b; b = t; }
-template <class T> FW_CUDA_FUNC T&          clamp   (T& v, T& lo, T& hi)                    { return min(max(v, lo), hi); }
-template <class T> FW_CUDA_FUNC const T&    clamp   (const T& v, const T& lo, const T& hi)  { return min(max(v, lo), hi); }
 
-template <class T> FW_CUDA_FUNC T&          min     (T& a, T& b)                { return (a < b) ? a : b; }
-template <class T> FW_CUDA_FUNC const T&    min     (const T& a, const T& b)    { return (a < b) ? a : b; }
-template <class T> FW_CUDA_FUNC T&          max     (T& a, T& b)                { return (a > b) ? a : b; }
-template <class T> FW_CUDA_FUNC const T&    max     (const T& a, const T& b)    { return (a > b) ? a : b; }
+#define FW_SPECIALIZE_MINMAX(TEMPLATE, T, MIN, MAX) \
+    TEMPLATE FW_CUDA_FUNC T min(T a, T b) { return MIN; } \
+    TEMPLATE FW_CUDA_FUNC T max(T a, T b) { return MAX; } \
+    TEMPLATE FW_CUDA_FUNC T min(T a, T b, T c) { return min(min(a, b), c); } \
+    TEMPLATE FW_CUDA_FUNC T max(T a, T b, T c) { return max(max(a, b), c); } \
+    TEMPLATE FW_CUDA_FUNC T min(T a, T b, T c, T d) { return min(min(min(a, b), c), d); } \
+    TEMPLATE FW_CUDA_FUNC T max(T a, T b, T c, T d) { return max(max(max(a, b), c), d); } \
+    TEMPLATE FW_CUDA_FUNC T min(T a, T b, T c, T d, T e) { return min(min(min(min(a, b), c), d), e); } \
+    TEMPLATE FW_CUDA_FUNC T max(T a, T b, T c, T d, T e) { return max(max(max(max(a, b), c), d), e); } \
+    TEMPLATE FW_CUDA_FUNC T min(T a, T b, T c, T d, T e, T f) { return min(min(min(min(min(a, b), c), d), e), f); } \
+    TEMPLATE FW_CUDA_FUNC T max(T a, T b, T c, T d, T e, T f) { return max(max(max(max(max(a, b), c), d), e), f); } \
+    TEMPLATE FW_CUDA_FUNC T min(T a, T b, T c, T d, T e, T f, T g) { return min(min(min(min(min(min(a, b), c), d), e), f), g); } \
+    TEMPLATE FW_CUDA_FUNC T max(T a, T b, T c, T d, T e, T f, T g) { return max(max(max(max(max(max(a, b), c), d), e), f), g); } \
+    TEMPLATE FW_CUDA_FUNC T min(T a, T b, T c, T d, T e, T f, T g, T h) { return min(min(min(min(min(min(min(a, b), c), d), e), f), g), h); } \
+    TEMPLATE FW_CUDA_FUNC T max(T a, T b, T c, T d, T e, T f, T g, T h) { return max(max(max(max(max(max(max(a, b), c), d), e), f), g), h); } \
+    TEMPLATE FW_CUDA_FUNC T clamp(T v, T lo, T hi) { return min(max(v, lo), hi); }
 
-template <class T> FW_CUDA_FUNC T&          min     (T& a, T& b, T& c)                      { return min(min(a, b), c); }
-template <class T> FW_CUDA_FUNC const T&    min     (const T& a, const T& b, const T& c)    { return min(min(a, b), c); }
-template <class T> FW_CUDA_FUNC T&          max     (T& a, T& b, T& c)                      { return max(max(a, b), c); }
-template <class T> FW_CUDA_FUNC const T&    max     (const T& a, const T& b, const T& c)    { return max(max(a, b), c); }
+FW_SPECIALIZE_MINMAX(template <class T>, T&, (a < b) ? a : b, (a > b) ? a : b)
+FW_SPECIALIZE_MINMAX(template <class T>, const T&, (a < b) ? a : b, (a > b) ? a : b)
 
-template <class T> FW_CUDA_FUNC T&          min     (T& a, T& b, T& c, T& d)                            { return min(min(min(a, b), c), d); }
-template <class T> FW_CUDA_FUNC const T&    min     (const T& a, const T& b, const T& c, const T& d)    { return min(min(min(a, b), c), d); }
-template <class T> FW_CUDA_FUNC T&          max     (T& a, T& b, T& c, T& d)                            { return max(max(max(a, b), c), d); }
-template <class T> FW_CUDA_FUNC const T&    max     (const T& a, const T& b, const T& c, const T& d)    { return max(max(max(a, b), c), d); }
-
-template <class T> FW_CUDA_FUNC T&          min     (T& a, T& b, T& c, T& d, T& e)                                  { return min(min(min(min(a, b), c), d), e); }
-template <class T> FW_CUDA_FUNC const T&    min     (const T& a, const T& b, const T& c, const T& d, const T& e)    { return min(min(min(min(a, b), c), d), e); }
-template <class T> FW_CUDA_FUNC T&          max     (T& a, T& b, T& c, T& d, T& e)                                  { return max(max(max(max(a, b), c), d), e); }
-template <class T> FW_CUDA_FUNC const T&    max     (const T& a, const T& b, const T& c, const T& d, const T& e)    { return max(max(max(max(a, b), c), d), e); }
-
-template <class T> FW_CUDA_FUNC T&          min     (T& a, T& b, T& c, T& d, T& e, T& f)                                        { return min(min(min(min(min(a, b), c), d), e), f); }
-template <class T> FW_CUDA_FUNC const T&    min     (const T& a, const T& b, const T& c, const T& d, const T& e, const T& f)    { return min(min(min(min(min(a, b), c), d), e), f); }
-template <class T> FW_CUDA_FUNC T&          max     (T& a, T& b, T& c, T& d, T& e, T& f)                                        { return max(max(max(max(max(a, b), c), d), e), f); }
-template <class T> FW_CUDA_FUNC const T&    max     (const T& a, const T& b, const T& c, const T& d, const T& e, const T& f)    { return max(max(max(max(max(a, b), c), d), e), f); }
-
-template <class T> FW_CUDA_FUNC T&          min     (T& a, T& b, T& c, T& d, T& e, T& f, T& g)                                              { return min(min(min(min(min(min(a, b), c), d), e), f), g); }
-template <class T> FW_CUDA_FUNC const T&    min     (const T& a, const T& b, const T& c, const T& d, const T& e, const T& f, const T& g)    { return min(min(min(min(min(min(a, b), c), d), e), f), g); }
-template <class T> FW_CUDA_FUNC T&          max     (T& a, T& b, T& c, T& d, T& e, T& f, T& g)                                              { return max(max(max(max(max(max(a, b), c), d), e), f), g); }
-template <class T> FW_CUDA_FUNC const T&    max     (const T& a, const T& b, const T& c, const T& d, const T& e, const T& f, const T& g)    { return max(max(max(max(max(max(a, b), c), d), e), f), g); }
-
-template <class T> FW_CUDA_FUNC T&          min     (T& a, T& b, T& c, T& d, T& e, T& f, T& g, T& h)                                                    { return min(min(min(min(min(min(min(a, b), c), d), e), f), g), h); }
-template <class T> FW_CUDA_FUNC const T&    min     (const T& a, const T& b, const T& c, const T& d, const T& e, const T& f, const T& g, const T& h)    { return min(min(min(min(min(min(min(a, b), c), d), e), f), g), h); }
-template <class T> FW_CUDA_FUNC T&          max     (T& a, T& b, T& c, T& d, T& e, T& f, T& g, T& h)                                                    { return max(max(max(max(max(max(max(a, b), c), d), e), f), g), h); }
-template <class T> FW_CUDA_FUNC const T&    max     (const T& a, const T& b, const T& c, const T& d, const T& e, const T& f, const T& g, const T& h)    { return max(max(max(max(max(max(max(a, b), c), d), e), f), g), h); }
+#if FW_CUDA
+FW_SPECIALIZE_MINMAX(, U32, ::min(a, b), ::max(a, b))
+FW_SPECIALIZE_MINMAX(, S32, ::min(a, b), ::max(a, b))
+FW_SPECIALIZE_MINMAX(, U64, ::min(a, b), ::max(a, b))
+FW_SPECIALIZE_MINMAX(, S64, ::min(a, b), ::max(a, b))
+FW_SPECIALIZE_MINMAX(, F32, ::fminf(a, b), ::fmaxf(a, b))
+FW_SPECIALIZE_MINMAX(, F64, ::fmin(a, b), ::fmax(a, b))
+#endif
 
 //------------------------------------------------------------------------
 }

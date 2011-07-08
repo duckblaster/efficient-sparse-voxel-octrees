@@ -80,12 +80,13 @@ public:
 
         void            use             (void);
 
+        static GLuint   createGLShader  (GLenum type, const String& typeStr, const String& source);
+        static void     linkGLProgram   (GLuint prog);
+
     private:
         void            init            (const String& vertexSource,
                                          GLenum geomInputType, GLenum geomOutputType, int geomVerticesOut, const String& geometrySource,
                                          const String& fragmentSource);
-
-        static GLuint   createShader    (GLenum type, const String& source);
 
     private:
                         Program         (const Program&); // forbidden
@@ -147,6 +148,7 @@ public:
 
     void                setUniform      (int loc, S32 v)    { if (loc >= 0) glUniform1i(loc, v); }
     void                setUniform      (int loc, F32 v)    { if (loc >= 0) glUniform1f(loc, v); }
+    void                setUniform      (int loc, F64 v)    { if (loc >= 0) glUniform1d(loc, v); }
     void                setUniform      (int loc, const Vec2f& v) { if (loc >= 0) glUniform2f(loc, v.x, v.y); }
     void                setUniform      (int loc, const Vec3f& v) { if (loc >= 0) glUniform3f(loc, v.x, v.y, v.z); }
     void                setUniform      (int loc, const Vec4f& v) { if (loc >= 0) glUniform4f(loc, v.x, v.y, v.z, v.w); }
@@ -173,9 +175,10 @@ public:
 
     int                 getFontHeight   (void) const        { return m_vgFontMetrics.tmHeight; }
     Vec2i               getStringSize   (const String& str);
-    Vec2i               drawString      (const String& str, const Vec4f& pos, const Vec2f& align, U32 abgr);
+    Vec2i               drawString      (const String& str, const Vec4f& pos, const Vec2f& align, U32 abgr) { return drawLabel(str, pos, align, abgr, 0); }
     Vec2i               drawString      (const String& str, const Vec2f& pos, const Vec2f& align, U32 abgr) { return drawString(str, Vec4f(pos, 0.0f, 1.0f), align, abgr); }
     Vec2i               drawString      (const String& str, const Vec2f& pos, U32 abgr) { return drawString(str, Vec4f(pos, 0.0f, 1.0f), 0.5f, abgr); }
+    Vec2i               drawLabel       (const String& str, const Vec4f& pos, const Vec2f& align, U32 fgABGR, U32 bgABGR);
     Vec2i               drawLabel       (const String& str, const Vec4f& pos, const Vec2f& align, U32 abgr);
     Vec2i               drawLabel       (const String& str, const Vec2f& pos, const Vec2f& align, U32 abgr) { return drawLabel(str, Vec4f(pos, 0.0f, 1.0f), align, abgr); }
     Vec2i               drawLabel       (const String& str, const Vec2f& pos, U32 abgr) { return drawLabel(str, Vec4f(pos, 0.0f, 1.0f), 0.5f, abgr); }

@@ -1,5 +1,5 @@
 
-Efficient Sparse Voxel Octrees 1.2
+Efficient Sparse Voxel Octrees 1.3
 ----------------------------------
 
 This package contains a proof-of-concept implementation of the voxel
@@ -9,7 +9,7 @@ implement real-time ray tracing of voxel data represented using a compact
 octree data structure.
 
 Samuli Laine, Tero Karras
-Copyright 2009-2010 NVIDIA Corporation
+Copyright 2009-2011 NVIDIA Corporation
 
 The source code is licensed under Apache License 2.0 (see LICENSE), and
 hosted by Google Code:
@@ -154,6 +154,9 @@ files:
 Version history
 ---------------
 
+Version 1.3, Jul 08, 2011
+- Fix compatibility issues with CUDA 4.0.
+
 Version 1.2, Dec 17, 2010
 - Fix issues with nvcc path autodetection with CUDA 3.2.
 
@@ -180,9 +183,9 @@ Known issues
   http://developer.download.nvidia.com/compute/cuda/3_2_prod/toolkit/docs/CUDA_3.2_Readiness_Tech_Brief.pdf
 
 - The support for mesh and image formats is very limited. In particular, only
-  Wavefront OBJ meshes and truecolor TGA/TIFF textures are supported. If you
-  have trouble importing a mesh, you may want to try enabling WAVEFRONT_DEBUG
-  in src/framework/io/MeshWavefrontIO.cpp.
+  Wavefront OBJ meshes and truecolor TGA/TIFF/BMP textures are supported. If
+  you have trouble importing a mesh, you may want to try enabling
+  WAVEFRONT_DEBUG in src/framework/io/MeshWavefrontIO.cpp.
 
 - Asynchronous file I/O does not work very well on Windows Vista. This
   usually causes random delays and lag when loading/building octrees in the

@@ -76,19 +76,25 @@ public:
     void            clearRange          (S64 dstOfs, int value, S64 size, bool async = false, CUstream cudaStream = NULL);
     void            getRange            (void* dst, S64 srcOfs, S64 size, bool async = false, CUstream cudaStream = NULL) const;
 
-    void            set                 (const void* ptr, S64 size)             { resize(size); setRange(0, ptr, size); }
-    void            set                 (Buffer& other)                         { if (&other != this) { resize(other.getSize()); setRange(0, other, 0, other.getSize()); } }
+    void            set                 (const void* ptr, S64 size)             { resizeDiscard(size); setRange(0, ptr, size); }
+    void            set                 (Buffer& other)                         { if (&other != this) { resizeDiscard(other.getSize()); setRange(0, other, 0, other.getSize()); } }
     void            clear               (int value = 0)                         { clearRange(0, value, m_size); }
 
     void            setOwner            (Module module, bool modify, bool async = false, CUstream cudaStream = NULL, S64 validSize = -1);
     Module          getOwner            (void) const                            { return m_owner; }
+    void            discard             (void)                                  { m_dirty = 0; }
 
     const U8*       getPtr              (S64 ofs = 0)                           { FW_ASSERT(ofs >= 0 && ofs <= m_size); setOwner(CPU, false); return m_cpuPtr + ofs; }
-    U8*             getMutablePtr       (S64 ofs = 0)                           { FW_ASSERT(ofs >= 0 && ofs <= m_size); setOwner(CPU, true); return m_cpuPtr + ofs; }
     GLuint          getGLBuffer         (void)                                  { setOwner(GL, false); return m_glBuffer; }
-    GLuint          getMutableGLBuffer  (void)                                  { setOwner(GL, true); return m_glBuffer; }
     CUdeviceptr     getCudaPtr          (S64 ofs = 0)                           { FW_ASSERT(ofs >= 0 && ofs <= m_size); setOwner(Cuda, false); return m_cudaPtr + (U32)ofs; }
+
+    U8*             getMutablePtr       (S64 ofs = 0)                           { FW_ASSERT(ofs >= 0 && ofs <= m_size); setOwner(CPU, true); return m_cpuPtr + ofs; }
+    GLuint          getMutableGLBuffer  (void)                                  { setOwner(GL, true); return m_glBuffer; }
     CUdeviceptr     getMutableCudaPtr   (S64 ofs = 0)                           { FW_ASSERT(ofs >= 0 && ofs <= m_size); setOwner(Cuda, true); return m_cudaPtr + (U32)ofs; }
+
+    U8*             getMutablePtrDiscard(S64 ofs = 0)                           { discard(); return getMutablePtr(ofs); }
+    GLuint          getMutableGLBufferDiscard(void)                             { discard(); return getMutableGLBuffer(); }
+    CUdeviceptr     getMutableCudaPtrDiscard(S64 ofs = 0)                       { discard(); return getMutableCudaPtr(ofs); }
 
     Buffer&         operator=           (Buffer& other)                         { set(other); return *this; }
     U8              operator[]          (S64 idx)                               { FW_ASSERT(idx < m_size); return *getPtr(idx); }

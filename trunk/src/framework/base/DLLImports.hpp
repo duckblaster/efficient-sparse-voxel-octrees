@@ -55,6 +55,10 @@ void    deinitDLLImports    (void);
 // CUDA definitions.
 //------------------------------------------------------------------------
 
+#if (CUDA_VERSION < 3010)
+typedef void* CUsurfref;
+#endif
+
 #if (CUDA_VERSION < 3020)
 typedef unsigned int    CUsize_t;
 #else
@@ -113,6 +117,7 @@ typedef unsigned int    GLhandleARB;
 #define GL_DYNAMIC_COPY                     0x88EA
 #define GL_TEXTURE0                         0x84C0
 #define GL_TEXTURE1                         0x84C1
+#define GL_TEXTURE2                         0x84C2
 #define GL_TEXTURE_3D                       0x806F
 #define GL_TEXTURE_CUBE_MAP                 0x8513
 #define GL_TEXTURE_CUBE_MAP_POSITIVE_X      0x8515
@@ -123,6 +128,29 @@ typedef unsigned int    GLhandleARB;
 #define GL_READ_FRAMEBUFFER                 0x8CA8
 #define GL_DRAW_FRAMEBUFFER                 0x8CA9
 #define GL_TEXTURE_MAX_ANISOTROPY_EXT       0x84FE
+#define GL_LUMINANCE32UI_EXT                0x8D74
+#define GL_LUMINANCE_INTEGER_EXT            0x8D9C
+#define GL_DEPTH_STENCIL_EXT                0x84F9
+#define GL_RGBA16F                          0x881A
+#define GL_R32F                             0x822E
+#define GL_RG                               0x8227
+#define GL_R16F                             0x822D
+#define GL_RG16F                            0x822F
+#define GL_RGBA32UI_EXT                     0x8D70
+#define GL_RGBA_INTEGER_EXT                 0x8D99
+#define GL_R16UI                            0x8234
+#define GL_RG_INTEGER                       0x8228
+#define GL_DEPTH_COMPONENT32                0x81A7
+#define GL_DEPTH_COMPONENT32F               0x8CAC
+#define GL_DEPTH_COMPONENT16                0x81A5
+#define GL_DEPTH_COMPONENT24                0x81A6
+#define GL_DEPTH24_STENCIL8_EXT             0x88F0
+#define GL_DEPTH_STENCIL_EXT                0x84F9
+#define GL_LUMINANCE32F_ARB                 0x8818
+#define GL_TEXTURE_RENDERBUFFER_NV          0x8E55
+#define GL_RENDERBUFFER_EXT                 0x8D41
+#define GL_RENDERBUFFER_COVERAGE_SAMPLES_NV 0x8CAB
+#define GL_RENDERBUFFER_COLOR_SAMPLES_NV    0x8E10
 
 #define WGL_ACCELERATION_ARB                0x2003
 #define WGL_ACCUM_BITS_ARB                  0x201D

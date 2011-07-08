@@ -160,13 +160,15 @@ bool FW::parseTexture(const char*& ptr, TextureSpec& value, const String& dirNam
         name = name.substring(1);
     while (name.endsWith(' '))
         name = name.substring(0, name.getLength() - 1);
+
+    // Zero-length file name => ignore.
+
     if (!name.getLength())
-        return false;
-    name = dirName + '/' + name;
+        return true;
 
     // Import texture.
 
-    value.texture = Texture::import(name);
+    value.texture = Texture::import(dirName + '/' + name);
     return true;
 }
 
@@ -175,7 +177,7 @@ bool FW::parseTexture(const char*& ptr, TextureSpec& value, const String& dirNam
 void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirName)
 {
     Material* mat = NULL;
-    for (;;)
+    for (int lineNum = 1;; lineNum++)
     {
         const char* line = mtlIn.readLine(true, true);
         if (!line || hasError())
@@ -245,7 +247,7 @@ void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirNa
             valid = parseTexture(ptr, tex, dirName);
             mat->textures[MeshBase::TextureType_Diffuse] = tex.texture;
         }
-        else if (parseLiteral(ptr, "map_d ") || parseLiteral(ptr, "map_D ") || // alpha texture
+        else if (parseLiteral(ptr, "map_d ") || parseLiteral(ptr, "map_D ") || parseLiteral(ptr, "map_opacity ") || // alpha texture
                  parseLiteral(ptr, "map_Ka ")) // hack: allow ambient texture as alpha
         {
             TextureSpec tex;
@@ -280,6 +282,8 @@ void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirNa
             parseLiteral(ptr, "sharpness ") ||      // reflection sharpness
             parseLiteral(ptr, "Ni ") ||             // index of refraction
             parseLiteral(ptr, "map_Ks ") ||         // specular texture
+            parseLiteral(ptr, "map_kS ") ||         // ???
+            parseLiteral(ptr, "map_kA ") ||         // ???
             parseLiteral(ptr, "map_Ns ") ||         // glossiness texture
             parseLiteral(ptr, "map_aat ") ||        // texture antialiasing
             parseLiteral(ptr, "decal ") ||          // blended texture
@@ -296,7 +300,7 @@ void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirNa
         }
 
         if (!valid)
-            setError("Invalid line in Wavefront MTL: '%s'!", line);
+            setError("Invalid line %d in Wavefront MTL: '%s'!", lineNum, line);
 
 #if (!WAVEFRONT_DEBUG)
         clearError();
@@ -310,7 +314,7 @@ void FW::loadObj(ImportState& s, BufferedInputStream& objIn, const String& dirNa
 {
     int submesh = -1;
     int defaultSubmesh = -1;
-    for (;;)
+    for (int lineNum = 1;; lineNum++)
     {
         const char* line = objIn.readLine(true, true);
         if (!line || hasError())
@@ -478,7 +482,7 @@ void FW::loadObj(ImportState& s, BufferedInputStream& objIn, const String& dirNa
         }
 
         if (!valid)
-            setError("Invalid line in Wavefront OBJ: '%s'!", line);
+            setError("Invalid line %d in Wavefront OBJ: '%s'!", lineNum, line);
 
 #if (!WAVEFRONT_DEBUG)
         clearError();

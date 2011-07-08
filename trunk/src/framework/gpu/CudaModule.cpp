@@ -191,6 +191,9 @@ void CudaModule::unsetTexRef(const String& name)
 
 void CudaModule::updateTexRefs(CUfunction kernel)
 {
+    if (getDriverVersion() >= 32)
+        return;
+
     for (int i = 0; i < m_texRefs.getSize(); i++)
         checkError("cuParamSetTexRef", cuParamSetTexRef(kernel, CU_PARAM_TR_DEFAULT, m_texRefs[i]));
 }
@@ -393,6 +396,7 @@ const char* CudaModule::decodeError(CUresult res)
     const char* error;
     switch (res)
     {
+    default:                                        error = "Unknown CUresult"; break;
     case CUDA_SUCCESS:                              error = "No error"; break;
     case CUDA_ERROR_INVALID_VALUE:                  error = "Invalid value"; break;
     case CUDA_ERROR_OUT_OF_MEMORY:                  error = "Out of memory"; break;
@@ -420,7 +424,25 @@ const char* CudaModule::decodeError(CUresult res)
     case CUDA_ERROR_LAUNCH_TIMEOUT:                 error = "Launch timeout"; break;
     case CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING:  error = "Launch incompatible texturing"; break;
     case CUDA_ERROR_UNKNOWN:                        error = "Unknown error"; break;
-    default:                                        error = "Unknown error"; break;
+
+#if (CUDA_VERSION >= 4000) // TODO: Some of these may exist in earlier versions, too.
+    case CUDA_ERROR_PROFILER_DISABLED:              error = "Profiler disabled"; break;
+    case CUDA_ERROR_PROFILER_NOT_INITIALIZED:       error = "Profiler not initialized"; break;
+    case CUDA_ERROR_PROFILER_ALREADY_STARTED:       error = "Profiler already started"; break;
+    case CUDA_ERROR_PROFILER_ALREADY_STOPPED:       error = "Profiler already stopped"; break;
+    case CUDA_ERROR_NOT_MAPPED_AS_ARRAY:            error = "Not mapped as array"; break;
+    case CUDA_ERROR_NOT_MAPPED_AS_POINTER:          error = "Not mapped as pointer"; break;
+    case CUDA_ERROR_ECC_UNCORRECTABLE:              error = "ECC uncorrectable"; break;
+    case CUDA_ERROR_UNSUPPORTED_LIMIT:              error = "Unsupported limit"; break;
+    case CUDA_ERROR_CONTEXT_ALREADY_IN_USE:         error = "Context already in use"; break;
+    case CUDA_ERROR_SHARED_OBJECT_SYMBOL_NOT_FOUND: error = "Shared object symbol not found"; break;
+    case CUDA_ERROR_SHARED_OBJECT_INIT_FAILED:      error = "Shared object init failed"; break;
+    case CUDA_ERROR_OPERATING_SYSTEM:               error = "Operating system error"; break;
+    case CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED:    error = "Peer access already enabled"; break;
+    case CUDA_ERROR_PEER_ACCESS_NOT_ENABLED:        error = "Peer access not enabled"; break;
+    case CUDA_ERROR_PRIMARY_CONTEXT_ACTIVE:         error = "Primary context active"; break;
+    case CUDA_ERROR_CONTEXT_IS_DESTROYED:           error = "Context is destroyed"; break;
+#endif
     }
     return error;
 }
@@ -515,25 +537,71 @@ void CudaModule::printDeviceInfo(CUdevice device)
         const char*         name;
     } attribs[] =
     {
-#define A(NAME) { CU_DEVICE_ATTRIBUTE_ ## NAME, #NAME }
-        A(MAX_THREADS_PER_BLOCK),
-        A(MAX_BLOCK_DIM_X),
-        A(MAX_BLOCK_DIM_Y),
-        A(MAX_BLOCK_DIM_Z),
-        A(MAX_GRID_DIM_X),
-        A(MAX_GRID_DIM_Y),
-        A(MAX_GRID_DIM_Z),
-        A(SHARED_MEMORY_PER_BLOCK),
-        A(TOTAL_CONSTANT_MEMORY),
-        A(WARP_SIZE),
-        A(MAX_PITCH),
-        A(REGISTERS_PER_BLOCK),
-        A(CLOCK_RATE),
-        A(TEXTURE_ALIGNMENT),
-        A(GPU_OVERLAP),
-        A(MULTIPROCESSOR_COUNT),
-//        A(KERNEL_EXEC_TIMEOUT),
-#undef A
+#define A21(ENUM, NAME) { CU_DEVICE_ATTRIBUTE_ ## ENUM, NAME },
+#if (CUDA_VERSION >= 4000)
+#   define A40(ENUM, NAME) A21(ENUM, NAME)
+#else
+#   define A40(ENUM, NAME) // TODO: Some of these may exist in earlier versions, too.
+#endif
+
+        A21(CLOCK_RATE,                         "Clock rate")
+        A40(MEMORY_CLOCK_RATE,                  "Memory clock rate")
+        A21(MULTIPROCESSOR_COUNT,               "Number of SMs")
+//      A40(GLOBAL_MEMORY_BUS_WIDTH,            "DRAM bus width")
+//      A40(L2_CACHE_SIZE,                      "L2 cache size")
+
+        A21(MAX_THREADS_PER_BLOCK,              "Max threads per block")
+        A40(MAX_THREADS_PER_MULTIPROCESSOR,     "Max threads per SM")
+        A21(REGISTERS_PER_BLOCK,                "Registers per block")
+//      A40(MAX_REGISTERS_PER_BLOCK,            "Max registers per block")
+        A21(SHARED_MEMORY_PER_BLOCK,            "Shared mem per block")
+//      A40(MAX_SHARED_MEMORY_PER_BLOCK,        "Max shared mem per block")
+        A21(TOTAL_CONSTANT_MEMORY,              "Constant memory")
+//      A21(WARP_SIZE,                          "Warp size")
+
+        A21(MAX_BLOCK_DIM_X,                    "Max blockDim.x")
+//      A21(MAX_BLOCK_DIM_Y,                    "Max blockDim.y")
+//      A21(MAX_BLOCK_DIM_Z,                    "Max blockDim.z")
+        A21(MAX_GRID_DIM_X,                     "Max gridDim.x")
+//      A21(MAX_GRID_DIM_Y,                     "Max gridDim.y")
+//      A21(MAX_GRID_DIM_Z,                     "Max gridDim.z")
+//      A40(MAXIMUM_TEXTURE1D_WIDTH,            "Max tex1D.x")
+//      A40(MAXIMUM_TEXTURE2D_WIDTH,            "Max tex2D.x")
+//      A40(MAXIMUM_TEXTURE2D_HEIGHT,           "Max tex2D.y")
+//      A40(MAXIMUM_TEXTURE3D_WIDTH,            "Max tex3D.x")
+//      A40(MAXIMUM_TEXTURE3D_HEIGHT,           "Max tex3D.y")
+//      A40(MAXIMUM_TEXTURE3D_DEPTH,            "Max tex3D.z")
+//      A40(MAXIMUM_TEXTURE1D_LAYERED_WIDTH,    "Max layerTex1D.x")
+//      A40(MAXIMUM_TEXTURE1D_LAYERED_LAYERS,   "Max layerTex1D.y")
+//      A40(MAXIMUM_TEXTURE2D_LAYERED_WIDTH,    "Max layerTex2D.x")
+//      A40(MAXIMUM_TEXTURE2D_LAYERED_HEIGHT,   "Max layerTex2D.y")
+//      A40(MAXIMUM_TEXTURE2D_LAYERED_LAYERS,   "Max layerTex2D.z")
+//      A40(MAXIMUM_TEXTURE2D_ARRAY_WIDTH,      "Max array.x")
+//      A40(MAXIMUM_TEXTURE2D_ARRAY_HEIGHT,     "Max array.y")
+//      A40(MAXIMUM_TEXTURE2D_ARRAY_NUMSLICES,  "Max array.z")
+
+//      A21(MAX_PITCH,                          "Max memcopy pitch")
+//      A21(TEXTURE_ALIGNMENT,                  "Texture alignment")
+//      A40(SURFACE_ALIGNMENT,                  "Surface alignment")
+
+        A40(CONCURRENT_KERNELS,                 "Concurrent launches supported")
+        A21(GPU_OVERLAP,                        "Concurrent memcopy supported")
+        A40(ASYNC_ENGINE_COUNT,                 "Max concurrent memcopies")
+//      A40(KERNEL_EXEC_TIMEOUT,                "Kernel launch time limited")
+//      A40(INTEGRATED,                         "Integrated with host memory")
+        A40(UNIFIED_ADDRESSING,                 "Unified addressing supported")
+        A40(CAN_MAP_HOST_MEMORY,                "Can map host memory")
+        A40(ECC_ENABLED,                        "ECC enabled")
+
+//      A40(TCC_DRIVER,                         "Driver is TCC")
+//      A40(COMPUTE_MODE,                       "Compute exclusivity mode")
+
+//      A40(PCI_BUS_ID,                         "PCI bus ID")
+//      A40(PCI_DEVICE_ID,                      "PCI device ID")
+//      A40(PCI_DOMAIN_ID,                      "PCI domain ID")
+
+#undef A21
+#undef A40
     };
 
     char name[256];
@@ -547,17 +615,34 @@ void CudaModule::printDeviceInfo(CUdevice device)
     name[FW_ARRAY_SIZE(name) - 1] = '\0';
 
     printf("\n");
-    printf("%-24s%s\n", "CUDA device", name);
-    printf("%-24s%d.%d\n", "Compute capability", major, minor);
-    printf("%-24s%d megs\n", "Total memory", memory >> 20);
+    printf("%-32s%s\n", sprintf("CUDA device %d", (int)device).getPtr(), name);
+    printf("%-32s%s\n", "---", "---");
+    printf("%-32s%d.%d\n", "Compute capability", major, minor);
+    printf("%-32s%.0f megs\n", "Total memory", (F32)memory * exp2(-20));
 
     for (int i = 0; i < (int)FW_ARRAY_SIZE(attribs); i++)
     {
         int value;
-        checkError("cuDeviceGetAttribute", cuDeviceGetAttribute(&value, attribs[i].attrib, device));
-        printf("%-24s%d\n", attribs[i].name, value);
+        if (cuDeviceGetAttribute(&value, attribs[i].attrib, device) == CUDA_SUCCESS)
+            printf("%-32s%d\n", attribs[i].name, value);
     }
     printf("\n");
+}
+
+//------------------------------------------------------------------------
+
+Vec2i CudaModule::selectGridSize(int numBlocks)
+{
+    int maxWidth;
+    checkError("cuDeviceGetAttribute", cuDeviceGetAttribute(&maxWidth, CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X, s_device));
+
+    Vec2i size(numBlocks, 1);
+    while (size.x > maxWidth)
+    {
+        size.x = (size.x + 1) >> 1;
+        size.y <<= 1;
+    }
+    return size;
 }
 
 //------------------------------------------------------------------------

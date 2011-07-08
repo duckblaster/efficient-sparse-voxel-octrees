@@ -321,7 +321,7 @@ String FW::getDateString(void)
 bool FW::parseSpace(const char*& ptr)
 {
     FW_ASSERT(ptr);
-    while (*ptr == ' ')
+    while (*ptr == ' ' || *ptr == '\t')
         ptr++;
     return true;
 }
@@ -369,6 +369,45 @@ bool FW::parseInt(const char*& ptr, S32& value)
         v = v * 10 + *tmp++ - '0';
 
     value = (neg) ? -v : v;
+    ptr = tmp;
+    return true;
+}
+
+//------------------------------------------------------------------------
+
+bool FW::parseInt(const char*& ptr, S64& value)
+{
+    const char* tmp = ptr;
+    S64 v = 0;
+    bool neg = (!parseChar(tmp, '+') && parseChar(tmp, '-'));
+    if (*tmp < '0' || *tmp > '9')
+        return false;
+    while (*tmp >= '0' && *tmp <= '9')
+        v = v * 10 + *tmp++ - '0';
+
+    value = (neg) ? -v : v;
+    ptr = tmp;
+    return true;
+}
+
+//------------------------------------------------------------------------
+
+bool FW::parseHex(const char*& ptr, U32& value)
+{
+    const char* tmp = ptr;
+    U32 v = 0;
+    for (;;)
+    {
+        if (*tmp >= '0' && *tmp <= '9')         v = v * 16 + *tmp++ - '0';
+        else if (*tmp >= 'A' && *tmp <= 'F')    v = v * 16 + *tmp++ - 'A' + 10;
+        else if (*tmp >= 'a' && *tmp <= 'f')    v = v * 16 + *tmp++ - 'a' + 10;
+        else                                    break;
+    }
+
+    if (tmp == ptr)
+        return false;
+
+    value = v;
     ptr = tmp;
     return true;
 }
