@@ -1,24 +1,35 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #include "gpu/CudaModule.hpp"
-#include "gpu/Buffer.hpp"
 #include "base/Thread.hpp"
 #include "base/Timer.hpp"
 #include "gpu/CudaCompiler.hpp"
+#include "gui/Image.hpp"
 
 using namespace FW;
 
@@ -26,11 +37,10 @@ using namespace FW;
 
 bool        CudaModule::s_inited        = false;
 bool        CudaModule::s_available     = false;
-CUdevice    CudaModule::s_device        = 0;
+CUdevice    CudaModule::s_device        = NULL;
 CUcontext   CudaModule::s_context       = NULL;
 CUevent     CudaModule::s_startEvent    = NULL;
 CUevent     CudaModule::s_endEvent      = NULL;
-bool        CudaModule::s_preferL1      = true;
 
 //------------------------------------------------------------------------
 
@@ -56,6 +66,23 @@ CudaModule::~CudaModule(void)
         delete m_globals[i];
 
     checkError("cuModuleUnload", cuModuleUnload(m_module));
+}
+
+//------------------------------------------------------------------------
+
+bool CudaModule::hasKernel(const String& name)
+{
+    return (findKernel(name) != NULL);
+}
+
+//------------------------------------------------------------------------
+
+CudaKernel CudaModule::getKernel(const String& name)
+{
+    CUfunction kernel = findKernel(name);
+    if (!kernel)
+        fail("CudaModule: Kernel not found '%s'!", name.getPtr());
+    return CudaKernel(this, kernel);
 }
 
 //------------------------------------------------------------------------
@@ -88,46 +115,6 @@ void CudaModule::updateGlobals(bool async, CUstream stream)
 
 //------------------------------------------------------------------------
 
-CUfunction CudaModule::getKernel(const String& name, int paramSize)
-{
-    CUfunction kernel = NULL;
-    cuModuleGetFunction(&kernel, m_module, name.getPtr());
-    if (!kernel)
-        cuModuleGetFunction(&kernel, m_module, (String("__globfunc_") + name).getPtr());
-    if (kernel)
-        checkError("cuParamSetSize", cuParamSetSize(kernel, paramSize));
-    return kernel;
-}
-
-//------------------------------------------------------------------------
-
-int CudaModule::setParami(CUfunction kernel, int offset, S32 value)
-{
-    if (kernel)
-        checkError("cuParamSeti", cuParamSeti(kernel, offset, value));
-    return sizeof(S32);
-}
-
-//------------------------------------------------------------------------
-
-int CudaModule::setParamf(CUfunction kernel, int offset, F32 value)
-{
-    if (kernel)
-        checkError("cuParamSetf", cuParamSetf(kernel, offset, value));
-    return sizeof(F32);
-}
-
-//------------------------------------------------------------------------
-
-int CudaModule::setParamPtr(CUfunction kernel, int offset, CUdeviceptr value)
-{
-    if (kernel)
-        checkError("cuParamSetv", cuParamSetv(kernel, offset, &value, sizeof(CUdeviceptr)));
-    return sizeof(CUdeviceptr);
-}
-
-//------------------------------------------------------------------------
-
 CUtexref CudaModule::getTexRef(const String& name)
 {
     S32* found = m_texRefHash.search(name);
@@ -140,6 +127,38 @@ CUtexref CudaModule::getTexRef(const String& name)
     m_texRefHash.add(name, m_texRefs.getSize());
     m_texRefs.add(texRef);
     return texRef;
+}
+
+//------------------------------------------------------------------------
+
+void CudaModule::setTexRefMode(CUtexref texRef, bool wrap, bool bilinear, bool normalizedCoords, bool readAsInt)
+{
+#if (!FW_USE_CUDA)
+
+    FW_UNREF(texRef);
+    FW_UNREF(wrap);
+    FW_UNREF(bilinear);
+    FW_UNREF(normalizedCoords);
+    FW_UNREF(readAsInt);
+    fail("CudaModule::setTexRefMode(): Built without FW_USE_CUDA!");
+
+#else
+
+    CUaddress_mode addressMode = (wrap) ? CU_TR_ADDRESS_MODE_WRAP : CU_TR_ADDRESS_MODE_CLAMP;
+    CUfilter_mode filterMode = (bilinear) ? CU_TR_FILTER_MODE_LINEAR : CU_TR_FILTER_MODE_POINT;
+
+    U32 flags = 0;
+    if (normalizedCoords)
+        flags |= CU_TRSF_NORMALIZED_COORDINATES;
+    if (readAsInt)
+        flags |= CU_TRSF_READ_AS_INTEGER;
+
+    for (int dim = 0; dim < 3; dim++)
+        checkError("cuTexRefSetAddressMode", cuTexRefSetAddressMode(texRef, dim, addressMode));
+    checkError("cuTexRefSetFilterMode", cuTexRefSetFilterMode(texRef, filterMode));
+    checkError("cuTexRefSetFlags", cuTexRefSetFlags(texRef, flags));
+
+#endif
 }
 
 //------------------------------------------------------------------------
@@ -162,21 +181,47 @@ void CudaModule::setTexRef(const String& name, CUdeviceptr ptr, S64 size, CUarra
 
 void CudaModule::setTexRef(const String& name, CUarray cudaArray, bool wrap, bool bilinear, bool normalizedCoords, bool readAsInt)
 {
-    CUaddress_mode addressMode = (wrap) ? CU_TR_ADDRESS_MODE_WRAP : CU_TR_ADDRESS_MODE_CLAMP;
-    CUfilter_mode filterMode = (bilinear) ? CU_TR_FILTER_MODE_LINEAR : CU_TR_FILTER_MODE_POINT;
+    CUtexref texRef = getTexRef(name);
+    setTexRefMode(texRef, wrap, bilinear, normalizedCoords, readAsInt);
 
-    U32 flags = 0;
-    if (normalizedCoords)
-        flags |= CU_TRSF_NORMALIZED_COORDINATES;
-    if (readAsInt)
-        flags |= CU_TRSF_READ_AS_INTEGER;
+#if FW_USE_CUDA
+    checkError("cuTexRefSetArray", cuTexRefSetArray(texRef, cudaArray, CU_TRSA_OVERRIDE_FORMAT));
+#else
+    FW_UNREF(cudaArray);
+#endif
+}
+
+//------------------------------------------------------------------------
+
+void CudaModule::setTexRef(const String& name, const Image& image, bool wrap, bool bilinear, bool normalizedCoords, bool readAsInt)
+{
+    FW_UNREF(name);
+    FW_UNREF(image);
+    FW_UNREF(wrap);
+    FW_UNREF(bilinear);
+    FW_UNREF(normalizedCoords);
+    FW_UNREF(readAsInt);
+
+#if (!FW_USE_CUDA)
+
+    fail("CudaModule::setTexRef(Image): Built without FW_USE_CUDA!");
+
+#elif (CUDA_VERSION < 2020)
+
+    fail("CudaModule: setTexRef(Image) requires CUDA 2.2 or later!");
+
+#else
+
+    CUDA_ARRAY_DESCRIPTOR desc;
+    ImageFormat format = image.chooseCudaFormat(&desc);
+    if (format != image.getFormat())
+        fail("CudaModule: Unsupported image format in setTexRef(Image)!");
 
     CUtexref texRef = getTexRef(name);
-    for (int dim = 0; dim < 3; dim++)
-        checkError("cuTexRefSetAddressMode", cuTexRefSetAddressMode(texRef, dim, addressMode));
-    checkError("cuTexRefSetFilterMode", cuTexRefSetFilterMode(texRef, filterMode));
-    checkError("cuTexRefSetFlags", cuTexRefSetFlags(texRef, flags));
-    checkError("cuTexRefSetArray", cuTexRefSetArray(texRef, cudaArray, CU_TRSA_OVERRIDE_FORMAT));
+    setTexRefMode(texRef, wrap, bilinear, normalizedCoords, readAsInt);
+    checkError("cuTexRefSetAddress2D", cuTexRefSetAddress2D(texRef, &desc, image.getBuffer().getCudaPtr(), (size_t)image.getStride()));
+
+#endif
 }
 
 //------------------------------------------------------------------------
@@ -191,11 +236,19 @@ void CudaModule::unsetTexRef(const String& name)
 
 void CudaModule::updateTexRefs(CUfunction kernel)
 {
+#if (!FW_USE_CUDA)
+
+    FW_UNREF(kernel);
+    fail("CudaModule::updateTexRefs(): Built without FW_USE_CUDA!");
+
+#else
+
     if (getDriverVersion() >= 32)
         return;
 
     for (int i = 0; i < m_texRefs.getSize(); i++)
         checkError("cuParamSetTexRef", cuParamSetTexRef(kernel, CU_PARAM_TR_DEFAULT, m_texRefs[i]));
+#endif
 }
 
 //------------------------------------------------------------------------
@@ -228,60 +281,6 @@ void CudaModule::setSurfRef(const String& name, CUarray cudaArray)
 
 //------------------------------------------------------------------------
 
-void CudaModule::launchKernel(CUfunction kernel, const Vec2i& blockSize, const Vec2i& gridSize, bool async, CUstream stream)
-{
-    if (!kernel)
-        fail("CudaModule: No kernel specified!");
-
-#if (CUDA_VERSION >= 3000)
-    if (isAvailable_cuFuncSetCacheConfig())
-        checkError("cuFuncSetCacheConfig", cuFuncSetCacheConfig(kernel,
-            (s_preferL1) ? CU_FUNC_CACHE_PREFER_L1 : CU_FUNC_CACHE_PREFER_SHARED));
-#endif
-
-    updateGlobals();
-    updateTexRefs(kernel);
-    checkError("cuFuncSetBlockShape", cuFuncSetBlockShape(kernel, blockSize.x, blockSize.y, 1));
-    if (async && isAvailable_cuLaunchGridAsync())
-        checkError("cuLaunchGridAsync", cuLaunchGridAsync(kernel, gridSize.x, gridSize.y, stream));
-    else
-        checkError("cuLaunchGrid", cuLaunchGrid(kernel, gridSize.x, gridSize.y));
-}
-
-//------------------------------------------------------------------------
-
-F32 CudaModule::launchKernelTimed(CUfunction kernel, const Vec2i& blockSize, const Vec2i& gridSize, bool async, CUstream stream, bool yield)
-{
-    // Update globals before timing.
-
-    updateGlobals();
-    updateTexRefs(kernel);
-    sync(false);
-
-    // Events not supported => use CPU-based timer.
-
-    if (!s_startEvent)
-    {
-        Timer timer(true);
-        launchKernel(kernel, blockSize, gridSize, async, stream);
-        sync(false); // spin for more accurate timing
-        return timer.getElapsed();
-    }
-
-    // Use events.
-
-    checkError("cuEventRecord", cuEventRecord(s_startEvent, NULL));
-    launchKernel(kernel, blockSize, gridSize, async, stream);
-    checkError("cuEventRecord", cuEventRecord(s_endEvent, NULL));
-    sync(yield);
-
-    F32 time;
-    checkError("cuEventElapsedTime", cuEventElapsedTime(&time, s_startEvent, s_endEvent));
-    return time * 1.0e-3f;
-}
-
-//------------------------------------------------------------------------
-
 void CudaModule::staticInit(void)
 {
     if (s_inited)
@@ -295,8 +294,10 @@ void CudaModule::staticInit(void)
     CUresult res = cuInit(0);
     if (res != CUDA_SUCCESS)
     {
+#if FW_USE_CUDA
         if (res != CUDA_ERROR_NO_DEVICE)
             checkError("cuInit", res);
+#endif
         return;
     }
 
@@ -305,7 +306,9 @@ void CudaModule::staticInit(void)
     printDeviceInfo(s_device);
 
     U32 flags = 0;
+#if FW_USE_CUDA
     flags |= CU_CTX_SCHED_SPIN; // use sync() if you want to yield
+#endif
 #if (CUDA_VERSION >= 2030)
     if (getDriverVersion() >= 23)
         flags |= CU_CTX_LMEM_RESIZE_TO_MAX; // reduce launch overhead with large localmem
@@ -376,6 +379,7 @@ void CudaModule::sync(bool yield)
         return;
     }
 
+#if FW_USE_CUDA
     checkError("cuEventRecord", cuEventRecord(s_endEvent, NULL));
     for (;;)
     {
@@ -387,6 +391,7 @@ void CudaModule::sync(bool yield)
         }
         Thread::yield();
     }
+#endif
 }
 
 //------------------------------------------------------------------------
@@ -398,6 +403,8 @@ const char* CudaModule::decodeError(CUresult res)
     {
     default:                                        error = "Unknown CUresult"; break;
     case CUDA_SUCCESS:                              error = "No error"; break;
+
+#if FW_USE_CUDA
     case CUDA_ERROR_INVALID_VALUE:                  error = "Invalid value"; break;
     case CUDA_ERROR_OUT_OF_MEMORY:                  error = "Out of memory"; break;
     case CUDA_ERROR_NOT_INITIALIZED:                error = "Not initialized"; break;
@@ -424,6 +431,7 @@ const char* CudaModule::decodeError(CUresult res)
     case CUDA_ERROR_LAUNCH_TIMEOUT:                 error = "Launch timeout"; break;
     case CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING:  error = "Launch incompatible texturing"; break;
     case CUDA_ERROR_UNKNOWN:                        error = "Unknown error"; break;
+#endif
 
 #if (CUDA_VERSION >= 4000) // TODO: Some of these may exist in earlier versions, too.
     case CUDA_ERROR_PROFILER_DISABLED:              error = "Profiler disabled"; break;
@@ -474,7 +482,7 @@ int CudaModule::getComputeCapability(void)
 {
     staticInit();
     if (!s_available)
-        return 0;
+        return 10;
 
     int major;
     int minor;
@@ -499,15 +507,22 @@ int CudaModule::getDeviceAttribute(CUdevice_attribute attrib)
 
 CUdevice CudaModule::selectDevice(void)
 {
+#if (!FW_USE_CUDA)
+
+    fail("Image::chooseCudaFormat(): Built without FW_USE_CUDA!");
+    return 0;
+
+#else
+
     int numDevices;
-    CUdevice device = 0;
+    CUdevice device = NULL;
     S32 bestScore = FW_S32_MIN;
     checkError("cuDeviceGetCount", cuDeviceGetCount(&numDevices));
 
     for (int i = 0; i < numDevices; i++)
     {
         CUdevice dev;
-        checkError("cuDeviceGet", cuDeviceGet(&dev, i));
+        checkError("cuDeviceGet", cuDeviceGet(&dev, i)); // TODO: Use cuGLGetDevices() on CUDA 4.1+.
 
         int clockRate;
         int numProcessors;
@@ -523,14 +538,23 @@ CUdevice CudaModule::selectDevice(void)
     }
 
     if (bestScore == FW_S32_MIN)
-        fail("No appropriate CUDA device found!");
+        fail("CudaModule: No appropriate CUDA device found!");
     return device;
+
+#endif
 }
 
 //------------------------------------------------------------------------
 
 void CudaModule::printDeviceInfo(CUdevice device)
 {
+#if (!FW_USE_CUDA)
+
+    FW_UNREF(device);
+    fail("CudaModule::printDeviceInfo(): Built without FW_USE_CUDA!");
+
+#else
+
     static const struct
     {
         CUdevice_attribute  attrib;
@@ -552,10 +576,8 @@ void CudaModule::printDeviceInfo(CUdevice device)
 
         A21(MAX_THREADS_PER_BLOCK,              "Max threads per block")
         A40(MAX_THREADS_PER_MULTIPROCESSOR,     "Max threads per SM")
-        A21(REGISTERS_PER_BLOCK,                "Registers per block")
-//      A40(MAX_REGISTERS_PER_BLOCK,            "Max registers per block")
-        A21(SHARED_MEMORY_PER_BLOCK,            "Shared mem per block")
-//      A40(MAX_SHARED_MEMORY_PER_BLOCK,        "Max shared mem per block")
+        A21(REGISTERS_PER_BLOCK,                "Max registers per block")
+        A21(SHARED_MEMORY_PER_BLOCK,            "Max shared mem per block")
         A21(TOTAL_CONSTANT_MEMORY,              "Constant memory")
 //      A21(WARP_SIZE,                          "Warp size")
 
@@ -627,14 +649,18 @@ void CudaModule::printDeviceInfo(CUdevice device)
             printf("%-32s%d\n", attribs[i].name, value);
     }
     printf("\n");
+
+#endif
 }
 
 //------------------------------------------------------------------------
 
 Vec2i CudaModule::selectGridSize(int numBlocks)
 {
-    int maxWidth;
+    int maxWidth = 65536;
+#if FW_USE_CUDA
     checkError("cuDeviceGetAttribute", cuDeviceGetAttribute(&maxWidth, CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X, s_device));
+#endif
 
     Vec2i size(numBlocks, 1);
     while (size.x > maxWidth)
@@ -643,6 +669,31 @@ Vec2i CudaModule::selectGridSize(int numBlocks)
         size.y <<= 1;
     }
     return size;
+}
+
+//------------------------------------------------------------------------
+
+CUfunction CudaModule::findKernel(const String& name)
+{
+    // Search from hash.
+
+    CUfunction* found = m_kernels.search(name);
+    if (found)
+        return *found;
+
+    // Search from module.
+
+    CUfunction kernel = NULL;
+    cuModuleGetFunction(&kernel, m_module, name.getPtr());
+    if (!kernel)
+        cuModuleGetFunction(&kernel, m_module, (String("__globfunc_") + name).getPtr());
+    if (!kernel)
+        return NULL;
+
+    // Add to hash.
+
+    m_kernels.add(name, kernel);
+    return kernel;
 }
 
 //------------------------------------------------------------------------

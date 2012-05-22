@@ -1,17 +1,28 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #pragma once
@@ -46,6 +57,9 @@ public:
         EventType_Paint,            /* Window contents need to be painted. */
         EventType_PrePaint,         /* Before processing EventType_Paint. */
         EventType_PostPaint,        /* After processing EventType_Paint. */
+		EventType_DropFiles,		/* User has dropped one or multiple files into window. */
+		EventType_PasteFiles,		/* User has pasted one or multiple files by pressing CTRL+V or SHIFT+INSERT. */
+		EventType_PasteImage,		/* User has pasted an image by pressing CTRL+V or SHIFT+INSERT. */
     };
 
     //------------------------------------------------------------------------
@@ -60,6 +74,8 @@ public:
         Vec2i               mousePos;       /* Unchanged unless EventType_Mouse. */
         Vec2i               mouseDelta;     /* Zero unless EventType_Mouse. */
         bool                mouseDragging;  /* One or more mouse buttons are down. */
+		Array<String>		files;			/* Names of dropped or pasted files. Only valid for EventType_DropFiles. */
+		Image*				image;			/* Pasted image, deleted by framework after event has been handled. Event handler can either set the pointer to NULL and take ownership, or take a copy of the image and let framework delete the original. */
         Window*             window;
     };
 
@@ -96,9 +112,14 @@ public:
     const GLContext::Config& getGLConfig        (void) const    { return m_glConfig; }
     GLContext*              getGL               (void); // also makes the context current
 
+	HWND					getHandle			(void) const	{ return m_hwnd; }
+
     void                    repaint             (void);
     void                    repaintNow          (void);
     void                    requestClose        (void);
+
+	void					enableDrop			(bool enable);
+	void					enablePaste			(bool enable);
 
     void                    addListener         (Listener* listener);
     void                    removeListener      (Listener* listener);
@@ -129,6 +150,7 @@ private:
     Event                   createKeyEvent      (bool down, const String& key) { return createGenericEvent((down) ? EventType_KeyDown : EventType_KeyUp, key, 0, m_mouseKnown, m_mousePos); }
     Event                   createCharEvent     (S32 chr)       { return createGenericEvent(EventType_Char, "", chr, m_mouseKnown, m_mousePos); }
     Event                   createMouseEvent    (bool mouseKnown, const Vec2i& mousePos) { return createGenericEvent(EventType_Mouse, "", 0, mouseKnown, mousePos); }
+	Event					createFileEvent		(EventType type, HANDLE hDrop);
     Event                   createGenericEvent  (EventType type, const String& key, S32 chr, bool mouseKnown, const Vec2i& mousePos);
     void                    postEvent           (const Event& ev);
 
@@ -158,6 +180,7 @@ private:
     bool                    m_isRealized;
     bool                    m_isVisible;
     Array<Listener*>        m_listeners;
+	bool					m_enablePaste;
 
     String                  m_title;
     bool                    m_isFullScreen;

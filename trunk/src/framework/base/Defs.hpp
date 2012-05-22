@@ -1,19 +1,30 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #pragma once
 
 #pragma warning(disable:4530) // C++ exception handler used, but unwind semantics are not enabled.
@@ -46,6 +57,10 @@ namespace FW
 #   define FW_CUDA 0
 #endif
 
+#if FW_CUDA && !defined(__CUDA_ARCH__)
+#   define __CUDA_ARCH__ 100 // e.g. 120 = compute capability 1.2
+#endif
+
 #if (FW_DEBUG || defined(FW_ENABLE_ASSERT)) && !FW_CUDA
 #   define FW_ASSERT(X) ((X) ? ((void)0) : FW::fail("Assertion failed!\n%s:%d\n%s", __FILE__, __LINE__, #X))
 #else
@@ -61,7 +76,7 @@ namespace FW
 #endif
 
 #define FW_UNREF(X)         ((void)(X))
-#define FW_ARRAY_SIZE(X)    (sizeof(X) / sizeof((X)[0]))
+#define FW_ARRAY_SIZE(X)    ((int)(sizeof(X) / sizeof((X)[0])))
 
 //------------------------------------------------------------------------
 
@@ -132,6 +147,9 @@ void            fail            (const char* fmt, ...);
 void            failWin32Error  (const char* funcName);
 void            failIfError     (void);
 
+// Re-entrancy. Called internally by Main and Window.
+
+int             incNestingLevel (int delta);
 bool            setDiscardEvents(bool discard);
 bool            getDiscardEvents(void);
 
@@ -158,8 +176,9 @@ void            profileEnd      (bool printResults = true);
 #endif
 
 //------------------------------------------------------------------------
+// min(), max(), clamp().
 
-template <class T> FW_CUDA_FUNC void        swap    (T& a, T& b)                            { T t = a; a = b; b = t; }
+template <class T> FW_CUDA_FUNC void swap(T& a, T& b) { T t = a; a = b; b = t; }
 
 #define FW_SPECIALIZE_MINMAX(TEMPLATE, T, MIN, MAX) \
     TEMPLATE FW_CUDA_FUNC T min(T a, T b) { return MIN; } \
@@ -191,8 +210,17 @@ FW_SPECIALIZE_MINMAX(, F64, ::fmin(a, b), ::fmax(a, b))
 #endif
 
 //------------------------------------------------------------------------
+// CUDA utilities.
+
+#if FW_CUDA
+#   define globalThreadIdx (threadIdx.x + blockDim.x * (threadIdx.y + blockDim.y * (blockIdx.x + gridDim.x * blockIdx.y)))
+#endif
+
+//------------------------------------------------------------------------
+// new, delete.
 }
 
+#ifndef FW_DO_NOT_OVERRIDE_NEW_DELETE
 #if !FW_CUDA
 
 inline void*    operator new        (size_t size)       { return FW::malloc(size); }
@@ -201,5 +229,6 @@ inline void     operator delete     (void* ptr)         { return FW::free(ptr); 
 inline void     operator delete[]   (void* ptr)         { return FW::free(ptr); }
 
 #endif
+#endif // FW_DO_NOT_OVERRIDE_NEW_DELETE
 
 //------------------------------------------------------------------------

@@ -1,27 +1,51 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #pragma once
 #include "base/Defs.hpp"
 
-#include <cuda.h>
+//------------------------------------------------------------------------
 
-#if !FW_CUDA
-#   define _WIN32_WINNT 0x0501
+#define FW_USE_CUDA 1
+#define FW_USE_GLEW 0
+
+//------------------------------------------------------------------------
+
+#if (FW_USE_CUDA)
+#   include <cuda.h>
+#   pragma warning(push,3)
+#       include <vector_functions.h> // float4, etc.
+#   pragma warning(pop)
+#endif
+
+#if (!FW_CUDA)
+#   define _WIN32_WINNT 0x0600
 #   define WIN32_LEAN_AND_MEAN
+#   define _KERNEL32_
 #   define _WINMM_
 #   include <windows.h>
 #   undef min
@@ -37,13 +61,9 @@
 
 //------------------------------------------------------------------------
 
-#define FW_USE_GLEW 0
-
-//------------------------------------------------------------------------
-
 namespace FW
 {
-#if !FW_CUDA
+#if (!FW_CUDA)
 void    setCudaDLLName      (const String& name);
 void    initDLLImports      (void);
 void    initGLImports       (void);
@@ -54,6 +74,44 @@ void    deinitDLLImports    (void);
 //------------------------------------------------------------------------
 // CUDA definitions.
 //------------------------------------------------------------------------
+
+#if (!FW_USE_CUDA)
+#   define CUDA_VERSION 2010
+#   define CUDAAPI __stdcall
+
+typedef enum { CUDA_SUCCESS = 0}        CUresult;
+typedef struct { FW::S32 x, y; }        int2;
+typedef struct { FW::S32 x, y, z; }     int3;
+typedef struct { FW::S32 x, y, z, w; }  int4;
+typedef struct { FW::F32 x, y; }        float2;
+typedef struct { FW::F32 x, y, z; }     float3;
+typedef struct { FW::F32 x, y, z, w; }  float4;
+typedef struct { FW::F64 x, y; }        double2;
+typedef struct { FW::F64 x, y, z; }     double3;
+typedef struct { FW::F64 x, y, z, w; }  double4;
+
+typedef void*   CUfunction;
+typedef void*   CUmodule;
+typedef int     CUdevice;
+typedef size_t  CUdeviceptr;
+typedef void*   CUcontext;
+typedef void*   CUdevprop;
+typedef int     CUdevice_attribute;
+typedef int     CUjit_option;
+typedef void*   CUtexref;
+typedef void*   CUarray;
+typedef int     CUarray_format;
+typedef int     CUaddress_mode;
+typedef int     CUfilter_mode;
+typedef void*   CUstream;
+typedef void*   CUevent;
+typedef void*   CUDA_MEMCPY2D;
+typedef void*   CUDA_MEMCPY3D;
+typedef void*   CUDA_ARRAY_DESCRIPTOR;
+typedef void*   CUDA_ARRAY3D_DESCRIPTOR;
+typedef int     CUfunction_attribute;
+
+#endif
 
 #if (CUDA_VERSION < 3010)
 typedef void* CUsurfref;
@@ -74,12 +132,16 @@ typedef size_t          CUsize_t;
 #   define GLEW_STATIC
 #   include "3rdparty/glew/include/GL/glew.h"
 #   include "3rdparty/glew/include/GL/wglew.h"
-#   include <cudaGL.h>
+#   if FW_USE_CUDA
+#       include <cudaGL.h>
+#   endif
 
 #elif (!FW_CUDA && !FW_USE_GLEW)
 #   define GL_FUNC_AVAILABLE(NAME) (isAvailable_ ## NAME())
 #   include <GL/gl.h>
-#   include <cudaGL.h>
+#   if FW_USE_CUDA
+#       include <cudaGL.h>
+#   endif
 
 typedef char            GLchar;
 typedef ptrdiff_t       GLintptr;
@@ -175,19 +237,155 @@ typedef unsigned int    GLhandleARB;
 #endif
 
 //------------------------------------------------------------------------
+// GL_NV_path_rendering
+//------------------------------------------------------------------------
 
-#if !FW_CUDA
-#   define FW_DLL_IMPORT_RETV(RET, CALL, NAME, PARAMS, PASS)    bool isAvailable_ ## NAME(void);
-#   define FW_DLL_IMPORT_VOID(RET, CALL, NAME, PARAMS, PASS)    bool isAvailable_ ## NAME(void);
-#   define FW_DLL_IMPORT_CUV2(RET, CALL, NAME, PARAMS, PASS)    bool isAvailable_ ## NAME(void);
-#   define FW_DLL_DECLARE_RETV(RET, CALL, NAME, PARAMS, PASS)   bool isAvailable_ ## NAME(void); RET CALL NAME PARAMS;
-#   define FW_DLL_DECLARE_VOID(RET, CALL, NAME, PARAMS, PASS)   bool isAvailable_ ## NAME(void); RET CALL NAME PARAMS;
+#define GL_CLOSE_PATH_NV                                    0x00
+#define GL_MOVE_TO_NV                                       0x02
+#define GL_RELATIVE_MOVE_TO_NV                              0x03
+#define GL_LINE_TO_NV                                       0x04
+#define GL_RELATIVE_LINE_TO_NV                              0x05
+#define GL_HORIZONTAL_LINE_TO_NV                            0x06
+#define GL_RELATIVE_HORIZONTAL_LINE_TO_NV                   0x07
+#define GL_VERTICAL_LINE_TO_NV                              0x08
+#define GL_RELATIVE_VERTICAL_LINE_TO_NV                     0x09
+#define GL_QUADRATIC_CURVE_TO_NV                            0x0A
+#define GL_RELATIVE_QUADRATIC_CURVE_TO_NV                   0x0B
+#define GL_CUBIC_CURVE_TO_NV                                0x0C
+#define GL_RELATIVE_CUBIC_CURVE_TO_NV                       0x0D
+#define GL_SMOOTH_QUADRATIC_CURVE_TO_NV                     0x0E
+#define GL_RELATIVE_SMOOTH_QUADRATIC_CURVE_TO_NV            0x0F
+#define GL_SMOOTH_CUBIC_CURVE_TO_NV                         0x10
+#define GL_RELATIVE_SMOOTH_CUBIC_CURVE_TO_NV                0x11
+#define GL_SMALL_CCW_ARC_TO_NV                              0x12
+#define GL_RELATIVE_SMALL_CCW_ARC_TO_NV                     0x13
+#define GL_SMALL_CW_ARC_TO_NV                               0x14
+#define GL_RELATIVE_SMALL_CW_ARC_TO_NV                      0x15
+#define GL_LARGE_CCW_ARC_TO_NV                              0x16
+#define GL_RELATIVE_LARGE_CCW_ARC_TO_NV                     0x17
+#define GL_LARGE_CW_ARC_TO_NV                               0x18
+#define GL_RELATIVE_LARGE_CW_ARC_TO_NV                      0x19
+#define GL_CIRCULAR_CCW_ARC_TO_NV                           0xF8
+#define GL_CIRCULAR_CW_ARC_TO_NV                            0xFA
+#define GL_CIRCULAR_TANGENT_ARC_TO_NV                       0xFC
+#define GL_ARC_TO_NV                                        0xFE
+#define GL_RELATIVE_ARC_TO_NV                               0xFF
+#define GL_PATH_FORMAT_SVG_NV                               0x9070
+#define GL_PATH_FORMAT_PS_NV                                0x9071
+#define GL_STANDARD_FONT_NAME_NV                            0x9072
+#define GL_SYSTEM_FONT_NAME_NV                              0x9073
+#define GL_FILE_NAME_NV                                     0x9074
+#define GL_PATH_STROKE_WIDTH_NV                             0x9075
+#define GL_PATH_END_CAPS_NV                                 0x9076
+#define GL_PATH_INITIAL_END_CAP_NV                          0x9077
+#define GL_PATH_TERMINAL_END_CAP_NV                         0x9078
+#define GL_PATH_JOIN_STYLE_NV                               0x9079
+#define GL_PATH_MITER_LIMIT_NV                              0x907A
+#define GL_PATH_DASH_CAPS_NV                                0x907B
+#define GL_PATH_INITIAL_DASH_CAP_NV                         0x907C
+#define GL_PATH_TERMINAL_DASH_CAP_NV                        0x907D
+#define GL_PATH_DASH_OFFSET_NV                              0x907E
+#define GL_PATH_CLIENT_LENGTH_NV                            0x907F
+#define GL_PATH_FILL_MODE_NV                                0x9080
+#define GL_PATH_FILL_MASK_NV                                0x9081
+#define GL_PATH_FILL_COVER_MODE_NV                          0x9082
+#define GL_PATH_STROKE_COVER_MODE_NV                        0x9083
+#define GL_PATH_STROKE_MASK_NV                              0x9084
+#define GL_PATH_SAMPLE_QUALITY_NV                           0x9085
+#define GL_COUNT_UP_NV                                      0x9088
+#define GL_COUNT_DOWN_NV                                    0x9089
+#define GL_PATH_OBJECT_BOUNDING_BOX_NV                      0x908A
+#define GL_CONVEX_HULL_NV                                   0x908B
+#define GL_BOUNDING_BOX_NV                                  0x908D
+#define GL_TRANSLATE_X_NV                                   0x908E
+#define GL_TRANSLATE_Y_NV                                   0x908F
+#define GL_TRANSLATE_2D_NV                                  0x9090
+#define GL_TRANSLATE_3D_NV                                  0x9091
+#define GL_AFFINE_2D_NV                                     0x9092
+#define GL_AFFINE_3D_NV                                     0x9094
+#define GL_TRANSPOSE_AFFINE_2D_NV                           0x9096
+#define GL_TRANSPOSE_AFFINE_3D_NV                           0x9098
+#define GL_UTF8_NV                                          0x909A
+#define GL_UTF16_NV                                         0x909B
+#define GL_BOUNDING_BOX_OF_BOUNDING_BOXES_NV                0x909C
+#define GL_PATH_COMMAND_COUNT_NV                            0x909D
+#define GL_PATH_COORD_COUNT_NV                              0x909E
+#define GL_PATH_DASH_ARRAY_COUNT_NV                         0x909F
+#define GL_PATH_COMPUTED_LENGTH_NV                          0x90A0
+#define GL_PATH_FILL_BOUNDING_BOX_NV                        0x90A1
+#define GL_PATH_STROKE_BOUNDING_BOX_NV                      0x90A2
+#define GL_SQUARE_NV                                        0x90A3
+#define GL_ROUND_NV                                         0x90A4
+#define GL_TRIANGULAR_NV                                    0x90A5
+#define GL_BEVEL_NV                                         0x90A6
+#define GL_MITER_REVERT_NV                                  0x90A7
+#define GL_MITER_TRUNCATE_NV                                0x90A8
+#define GL_SKIP_MISSING_GLYPH_NV                            0x90A9
+#define GL_USE_MISSING_GLYPH_NV                             0x90AA
+#define GL_PATH_DASH_OFFSET_RESET_NV                        0x90B4
+#define GL_MOVE_TO_RESETS_NV                                0x90B5
+#define GL_MOVE_TO_CONTINUES_NV                             0x90B6
+#define GL_BOLD_BIT_NV                                      0x01
+#define GL_ITALIC_BIT_NV                                    0x02
+#define GL_PATH_ERROR_POSITION_NV                           0x90AB
+#define GL_PATH_FOG_GEN_MODE_NV                             0x90AC
+#define GL_GLYPH_WIDTH_BIT_NV                               0x01
+#define GL_GLYPH_HEIGHT_BIT_NV                              0x02
+#define GL_GLYPH_HORIZONTAL_BEARING_X_BIT_NV                0x04
+#define GL_GLYPH_HORIZONTAL_BEARING_Y_BIT_NV                0x08
+#define GL_GLYPH_HORIZONTAL_BEARING_ADVANCE_BIT_NV          0x10
+#define GL_GLYPH_VERTICAL_BEARING_X_BIT_NV                  0x20
+#define GL_GLYPH_VERTICAL_BEARING_Y_BIT_NV                  0x40
+#define GL_GLYPH_VERTICAL_BEARING_ADVANCE_BIT_NV            0x80
+#define GL_GLYPH_HAS_KERNING_NV                             0x100
+#define GL_FONT_X_MIN_BOUNDS_NV                             0x00010000
+#define GL_FONT_Y_MIN_BOUNDS_NV                             0x00020000
+#define GL_FONT_X_MAX_BOUNDS_NV                             0x00040000
+#define GL_FONT_Y_MAX_BOUNDS_NV                             0x00080000
+#define GL_FONT_UNITS_PER_EM_NV                             0x00100000
+#define GL_FONT_ASCENDER_NV                                 0x00200000
+#define GL_FONT_DESCENDER_NV                                0x00400000
+#define GL_FONT_HEIGHT_NV                                   0x00800000
+#define GL_FONT_MAX_ADVANCE_WIDTH_NV                        0x01000000
+#define GL_FONT_MAX_ADVANCE_HEIGHT_NV                       0x02000000
+#define GL_FONT_UNDERLINE_POSITION_NV                       0x04000000
+#define GL_FONT_UNDERLINE_THICKNESS_NV                      0x08000000
+#define GL_FONT_HAS_KERNING_NV                              0x10000000
+#define GL_ACCUM_ADJACENT_PAIRS_NV                          0x90AD
+#define GL_ADJACENT_PAIRS_NV                                0x90AE
+#define GL_FIRST_TO_REST_NV                                 0x90AF
+#define GL_PATH_GEN_MODE_NV                                 0x90B0
+#define GL_PATH_GEN_COEFF_NV                                0x90B1
+#define GL_PATH_GEN_COLOR_FORMAT_NV                         0x90B2
+#define GL_PATH_GEN_COMPONENTS_NV                           0x90B3
+#define GL_PATH_STENCIL_FUNC_NV                             0x90B7
+#define GL_PATH_STENCIL_REF_NV                              0x90B8
+#define GL_PATH_STENCIL_VALUE_MASK_NV                       0x90B9
+#define GL_PATH_STENCIL_DEPTH_OFFSET_FACTOR_NV              0x90BD
+#define GL_PATH_STENCIL_DEPTH_OFFSET_UNITS_NV               0x90BE
+#define GL_PATH_COVER_DEPTH_FUNC_NV                         0x90BF
+
+//------------------------------------------------------------------------
+
+#if (!FW_CUDA)
+#   define FW_DLL_IMPORT_RETV(RET, CALL, NAME, PARAMS, PASS)        bool isAvailable_ ## NAME(void);
+#   define FW_DLL_IMPORT_VOID(RET, CALL, NAME, PARAMS, PASS)        bool isAvailable_ ## NAME(void);
+#   define FW_DLL_DECLARE_RETV(RET, CALL, NAME, PARAMS, PASS)       bool isAvailable_ ## NAME(void); RET CALL NAME PARAMS;
+#   define FW_DLL_DECLARE_VOID(RET, CALL, NAME, PARAMS, PASS)       bool isAvailable_ ## NAME(void); RET CALL NAME PARAMS;
+#   if (FW_USE_CUDA)
+#       define FW_DLL_IMPORT_CUDA(RET, CALL, NAME, PARAMS, PASS)    bool isAvailable_ ## NAME(void);
+#       define FW_DLL_IMPORT_CUV2(RET, CALL, NAME, PARAMS, PASS)    bool isAvailable_ ## NAME(void);
+#   else
+#       define FW_DLL_IMPORT_CUDA(RET, CALL, NAME, PARAMS, PASS)    bool isAvailable_ ## NAME(void); RET CALL NAME PARAMS;
+#       define FW_DLL_IMPORT_CUV2(RET, CALL, NAME, PARAMS, PASS)    bool isAvailable_ ## NAME(void); RET CALL NAME PARAMS;
+#   endif
 #   include "base/DLLImports.inl"
 #   undef FW_DLL_IMPORT_RETV
 #   undef FW_DLL_IMPORT_VOID
-#   undef FW_DLL_IMPORT_CUV2
 #   undef FW_DLL_DECLARE_RETV
 #   undef FW_DLL_DECLARE_VOID
+#   undef FW_DLL_IMPORT_CUDA
+#   undef FW_DLL_IMPORT_CUV2
 #endif
 
 //------------------------------------------------------------------------

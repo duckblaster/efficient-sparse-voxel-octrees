@@ -1,19 +1,30 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #include "base/Sort.hpp"
 #include "base/MulticoreLauncher.hpp"
 
@@ -23,7 +34,7 @@ using namespace FW;
 
 #define QSORT_STACK_SIZE    32
 #define QSORT_MIN_SIZE      16
-#define MULTICORE_MIN_SIZE  (1 << 14)
+#define MULTICORE_MIN_SIZE  (1 << 13)
 
 //------------------------------------------------------------------------
 
@@ -57,7 +68,7 @@ void FW::insertionSort(int start, int size, void* data, SortCompareFunc compareF
     for (int i = 1; i < size; i++)
     {
         int j = start + i - 1;
-        while (j >= start && compareFunc(data, j, j + 1) > 0)
+        while (j >= start && compareFunc(data, j + 1, j))
         {
             swapFunc(data, j, j + 1);
             j--;
@@ -76,9 +87,9 @@ int FW::median3(int low, int high, void* data, SortCompareFunc compareFunc)
     int c = (low + high) >> 1;
     int h = high - 2;
 
-    if (compareFunc(data, l, h) > 0) swap(l, h);
-    if (compareFunc(data, l, c) > 0) c = l;
-    return (compareFunc(data, c, h) > 0) ? h : c;
+    if (compareFunc(data, h, l)) swap(l, h);
+    if (compareFunc(data, c, l)) c = l;
+    return (compareFunc(data, h, c)) ? h : c;
 }
 
 //------------------------------------------------------------------------
@@ -97,10 +108,10 @@ int FW::partition(int low, int high, void* data, SortCompareFunc compareFunc, So
     {
         do
             i++;
-        while (compareFunc(data, i, high - 1) < 0);
+        while (compareFunc(data, i, high - 1));
         do
             j--;
-        while (compareFunc(data, j, high - 1) > 0);
+        while (compareFunc(data, high - 1, j));
 
         FW_ASSERT(i >= low && j >= low && i < high && j < high);
         if (i >= j)
@@ -189,25 +200,27 @@ void FW::qsortMulticore(MulticoreLauncher::Task& task)
 
 //------------------------------------------------------------------------
 
-void FW::sort(int start, int end, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc)
+void FW::sort(void* data, int start, int end, SortCompareFunc compareFunc, SortSwapFunc swapFunc, bool multicore)
 {
     FW_ASSERT(start <= end);
     FW_ASSERT(compareFunc && swapFunc);
+
+    // Nothing to do => skip.
+
     if (end - start < 2)
         return;
 
+    // Single-core.
+
+    if (!multicore || end - start < MULTICORE_MIN_SIZE)
+    {
     qsort(start, end, data, compareFunc, swapFunc);
 }
 
-//------------------------------------------------------------------------
+    // Multicore.
 
-void FW::sortMulticore(int start, int end, void* data, SortCompareFunc compareFunc, SortSwapFunc swapFunc)
+    else
 {
-    FW_ASSERT(start <= end);
-    FW_ASSERT(compareFunc && swapFunc);
-    if (end - start < 2)
-        return;
-
     TaskSpec* spec = new TaskSpec;
     spec->low = start;
     spec->high = end;
@@ -221,89 +234,6 @@ void FW::sortMulticore(int start, int end, void* data, SortCompareFunc compareFu
     task.data = spec;
     qsortMulticore(task);
 }
-
-//------------------------------------------------------------------------
-
-int FW::compareU32(void* data, int idxA, int idxB)
-{
-    U32 a = ((U32*)data)[idxA];
-    U32 b = ((U32*)data)[idxB];
-    return (a < b) ? -1 : (a > b) ? 1 : 0;
-}
-
-void FW::swapU32(void* data, int idxA, int idxB)
-{
-    swap(((U32*)data)[idxA], ((U32*)data)[idxB]);
-}
-
-//------------------------------------------------------------------------
-
-int FW::compareU64(void* data, int idxA, int idxB)
-{
-    U64 a = ((U64*)data)[idxA];
-    U64 b = ((U64*)data)[idxB];
-    return (a < b) ? -1 : (a > b) ? 1 : 0;
-}
-
-void FW::swapU64(void* data, int idxA, int idxB)
-{
-    swap(((U64*)data)[idxA], ((U64*)data)[idxB]);
-}
-
-//------------------------------------------------------------------------
-
-int FW::compareS32(void* data, int idxA, int idxB)
-{
-    S32 a = ((S32*)data)[idxA];
-    S32 b = ((S32*)data)[idxB];
-    return (a < b) ? -1 : (a > b) ? 1 : 0;
-}
-
-void FW::swapS32(void* data, int idxA, int idxB)
-{
-    swap(((S32*)data)[idxA], ((S32*)data)[idxB]);
-}
-
-//------------------------------------------------------------------------
-
-int FW::compareS64(void* data, int idxA, int idxB)
-{
-    S64 a = ((S64*)data)[idxA];
-    S64 b = ((S64*)data)[idxB];
-    return (a < b) ? -1 : (a > b) ? 1 : 0;
-}
-
-void FW::swapS64(void* data, int idxA, int idxB)
-{
-    swap(((S64*)data)[idxA], ((S64*)data)[idxB]);
-}
-
-//------------------------------------------------------------------------
-
-int FW::compareF32(void* data, int idxA, int idxB)
-{
-    F32 a = ((F32*)data)[idxA];
-    F32 b = ((F32*)data)[idxB];
-    return (a < b) ? -1 : (a > b) ? 1 : 0;
-}
-
-void FW::swapF32(void* data, int idxA, int idxB)
-{
-    swap(((F32*)data)[idxA], ((F32*)data)[idxB]);
-}
-
-//------------------------------------------------------------------------
-
-int FW::compareF64(void* data, int idxA, int idxB)
-{
-    F64 a = ((F64*)data)[idxA];
-    F64 b = ((F64*)data)[idxB];
-    return (a < b) ? -1 : (a > b) ? 1 : 0;
-}
-
-void FW::swapF64(void* data, int idxA, int idxB)
-{
-    swap(((F64*)data)[idxA], ((F64*)data)[idxB]);
 }
 
 //------------------------------------------------------------------------

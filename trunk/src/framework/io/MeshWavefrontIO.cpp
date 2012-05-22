@@ -1,19 +1,30 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #include "io/MeshWavefrontIO.hpp"
 #include "io/File.hpp"
 #include "base/Hash.hpp"
@@ -49,8 +60,11 @@ struct ImportState
     Array<Vec2f>            texCoords;
     Array<Vec3f>            normals;
 
-    Hash<VertexPNT, S32>    vertexHash;
+    Hash<Vec3i, S32>        vertexHash;
     Hash<String, Material>  materialHash;
+
+    Array<S32>              vertexTmp;
+    Array<Vec3i>            indexTmp;
 };
 
 template <class T> bool equals  (const VertexPNT& a, const VertexPNT& b);
@@ -105,6 +119,9 @@ bool FW::parseTexture(const char*& ptr, TextureSpec& value, const String& dirNam
     value.texture   = Texture();
     value.base      = 0.0f;
     value.gain      = 1.0f;
+
+    if (hasError())
+        return false;
 
     // Parse options.
 
@@ -169,6 +186,10 @@ bool FW::parseTexture(const char*& ptr, TextureSpec& value, const String& dirNam
     // Import texture.
 
     value.texture = Texture::import(dirName + '/' + name);
+
+#if (!WAVEFRONT_DEBUG)
+    clearError();
+#endif
     return true;
 }
 
@@ -180,7 +201,7 @@ void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirNa
     for (int lineNum = 1;; lineNum++)
     {
         const char* line = mtlIn.readLine(true, true);
-        if (!line || hasError())
+        if (!line || ((lineNum & 0xFF) == 0 && hasError()))
             break;
 
         const char* ptr = line;
@@ -202,7 +223,9 @@ void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirNa
         }
         else if (!mat)
         {
+#if WAVEFRONT_DEBUG
             setError("No current material in Wavefront MTL: '%s'!", line);
+#endif
         }
         else if (parseLiteral(ptr, "Ka ") && parseSpace(ptr)) // ambient color
         {
@@ -247,8 +270,7 @@ void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirNa
             valid = parseTexture(ptr, tex, dirName);
             mat->textures[MeshBase::TextureType_Diffuse] = tex.texture;
         }
-        else if (parseLiteral(ptr, "map_d ") || parseLiteral(ptr, "map_D ") || parseLiteral(ptr, "map_opacity ") || // alpha texture
-                 parseLiteral(ptr, "map_Ka ")) // hack: allow ambient texture as alpha
+        else if (parseLiteral(ptr, "map_d ") || parseLiteral(ptr, "map_D ") || parseLiteral(ptr, "map_opacity ")) // alpha texture
         {
             TextureSpec tex;
             valid = parseTexture(ptr, tex, dirName);
@@ -299,11 +321,9 @@ void FW::loadMtl(ImportState& s, BufferedInputStream& mtlIn, const String& dirNa
             valid = true;
         }
 
+#if WAVEFRONT_DEBUG
         if (!valid)
             setError("Invalid line %d in Wavefront MTL: '%s'!", lineNum, line);
-
-#if (!WAVEFRONT_DEBUG)
-        clearError();
 #endif
     }
 }
@@ -314,10 +334,11 @@ void FW::loadObj(ImportState& s, BufferedInputStream& objIn, const String& dirNa
 {
     int submesh = -1;
     int defaultSubmesh = -1;
+
     for (int lineNum = 1;; lineNum++)
     {
         const char* line = objIn.readLine(true, true);
-        if (!line || hasError())
+        if (!line || ((lineNum & 0xFF) == 0 && hasError()))
             break;
 
         const char* ptr = line;
@@ -363,7 +384,7 @@ void FW::loadObj(ImportState& s, BufferedInputStream& objIn, const String& dirNa
         }
         else if (parseLiteral(ptr, "f ") && parseSpace(ptr)) // face
         {
-            Array<S32> verts;
+            s.vertexTmp.clear();
             while (*ptr)
             {
                 Vec3i ptn;
@@ -381,29 +402,25 @@ void FW::loadObj(ImportState& s, BufferedInputStream& objIn, const String& dirNa
                 Vec3i size(s.positions.getSize(), s.texCoords.getSize(), s.normals.getSize());
                 for (int i = 0; i < 3; i++)
                 {
-                    if (ptn[i] > 0)
-                        ptn[i]--;
-                    else if (ptn[i] < 0)
+                    if (ptn[i] < 0)
                         ptn[i] += size[i];
                     else
-                        ptn[i] = -1;
+                        ptn[i]--;
 
                     if (ptn[i] < 0 || ptn[i] >= size[i])
                         ptn[i] = -1;
                 }
 
-                VertexPNT v;
+                S32* idx = s.vertexHash.search(ptn);
+                if (idx)
+                    s.vertexTmp.add(*idx);
+                else
+                {
+                    s.vertexTmp.add(s.vertexHash.add(ptn, s.mesh->numVertices()));
+                    VertexPNT& v = s.mesh->addVertex();
                 v.p = (ptn.x == -1) ? Vec3f(0.0f) : s.positions[ptn.x];
                 v.t = (ptn.y == -1) ? Vec2f(0.0f) : s.texCoords[ptn.y];
                 v.n = (ptn.z == -1) ? Vec3f(0.0f) : s.normals[ptn.z];
-
-                S32* idx = s.vertexHash.search(v);
-                if (idx)
-                    verts.add(*idx);
-                else
-                {
-                    verts.add(s.vertexHash.add(v, s.mesh->numVertices()));
-                    s.mesh->addVertex(v);
                 }
             }
             if (!*ptr)
@@ -414,16 +431,20 @@ void FW::loadObj(ImportState& s, BufferedInputStream& objIn, const String& dirNa
                         defaultSubmesh = s.mesh->addSubmesh();
                     submesh = defaultSubmesh;
                 }
-                Array<Vec3i>& indices = s.mesh->mutableIndices(submesh);
-                for (int i = 2; i < verts.getSize(); i++)
-                    indices.add(Vec3i(verts[0], verts[i - 1], verts[i]));
+                for (int i = 2; i < s.vertexTmp.getSize(); i++)
+                    s.indexTmp.add(Vec3i(s.vertexTmp[0], s.vertexTmp[i - 1], s.vertexTmp[i]));
                 valid = true;
             }
         }
         else if (parseLiteral(ptr, "usemtl ") && parseSpace(ptr)) // material name
         {
             Material* mat = s.materialHash.search(ptr);
+            if (submesh != -1)
+            {
+                s.mesh->mutableIndices(submesh).add(s.indexTmp);
+                s.indexTmp.clear();
             submesh = -1;
+            }
             if (mat)
             {
                 if (mat->submesh == -1)
@@ -432,6 +453,7 @@ void FW::loadObj(ImportState& s, BufferedInputStream& objIn, const String& dirNa
                     s.mesh->material(mat->submesh) = *mat;
                 }
                 submesh = mat->submesh;
+                s.indexTmp.clear();
             }
             valid = true;
         }
@@ -439,10 +461,17 @@ void FW::loadObj(ImportState& s, BufferedInputStream& objIn, const String& dirNa
         {
             if (dirName.getLength())
             {
+                if (hasError())
+                    break;
+
                 String fileName = dirName + "/" + ptr;
                 File file(fileName, File::Read);
                 BufferedInputStream mtlIn(file);
                 loadMtl(s, mtlIn, fileName.getDirName());
+
+#if (!WAVEFRONT_DEBUG)
+                clearError();
+#endif
             }
             valid = true;
         }
@@ -481,21 +510,35 @@ void FW::loadObj(ImportState& s, BufferedInputStream& objIn, const String& dirNa
             valid = true;
         }
 
+#if WAVEFRONT_DEBUG
         if (!valid)
             setError("Invalid line %d in Wavefront OBJ: '%s'!", lineNum, line);
-
-#if (!WAVEFRONT_DEBUG)
-        clearError();
 #endif
     }
+
+    // Flush remaining indices.
+
+    if (submesh != -1)
+        s.mesh->mutableIndices(submesh).add(s.indexTmp);
 }
 
 //------------------------------------------------------------------------
 
 Mesh<VertexPNT>* FW::importWavefrontMesh(BufferedInputStream& stream, const String& fileName)
 {
+    int vertexCapacity = 4 << 10;
+    int indexCapacity = 4 << 10;
+
     ImportState s;
     s.mesh = new Mesh<VertexPNT>;
+    s.mesh->resizeVertices(vertexCapacity);
+    s.mesh->clearVertices();
+    s.positions.setCapacity(vertexCapacity);
+    s.texCoords.setCapacity(vertexCapacity);
+    s.normals.setCapacity(vertexCapacity);
+    s.vertexHash.setCapacity(vertexCapacity);
+    s.indexTmp.setCapacity(indexCapacity);
+
     loadObj(s, stream, fileName.getDirName());
     s.mesh->compact();
     return s.mesh;

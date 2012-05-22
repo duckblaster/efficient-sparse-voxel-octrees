@@ -1,19 +1,30 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #include "3d/Mesh.hpp"
 #include "io/File.hpp"
 #include "io/MeshBinaryIO.hpp"
@@ -616,6 +627,8 @@ void MeshBase::recomputeNormals(void)
     if (posAttrib == -1 || normalAttrib == -1)
         return;
 
+    // Calculate average normal for each vertex position.
+
     Hash<Vec3f, Vec3f> posToNormal;
     Vec3f v[3];
 
@@ -640,6 +653,8 @@ void MeshBase::recomputeNormals(void)
         }
     }
 
+    // Output normals.
+
     for (int i = 0; i < numVertices(); i++)
     {
         Vec3f pos = getVertexAttrib(i, posAttrib).getXYZ();
@@ -658,6 +673,187 @@ void MeshBase::flipTriangles(void)
         Array<Vec3i>& tris = mutableIndices(i);
         for (int j = 0; j < tris.getSize(); j++)
             swap(tris[j].x, tris[j].y);
+    }
+}
+
+//------------------------------------------------------------------------
+
+void MeshBase::clean(void)
+{
+    // Remove degenerate triangles and empty submeshes.
+
+    int submeshOut = 0;
+    for (int submeshIn = 0; submeshIn < numSubmeshes(); submeshIn++)
+    {
+        Array<Vec3i>& inds = mutableIndices(submeshIn);
+        int indOut = 0;
+        for (int i = 0; i < inds.getSize(); i++)
+        {
+            const Vec3i& v = inds[i];
+            if (v.x != v.y && v.x != v.z && v.y != v.z)
+                inds[indOut++] = v;
+        }
+
+        if (indOut)
+        {
+            inds.resize(indOut);
+            if (submeshOut != submeshIn)
+            {
+                material(submeshOut) = material(submeshIn);
+                mutableIndices(submeshOut) = inds;
+            }
+            mutableIndices(submeshOut).compact();
+            submeshOut++;
+        }
+    }
+    resizeSubmeshes(submeshOut);
+
+    // Tag referenced vertices.
+
+    Array<U8> vertUsed;
+    vertUsed.reset(numVertices());
+    memset(vertUsed.getPtr(), 0, vertUsed.getNumBytes());
+
+    for (int submeshIn = 0; submeshIn < numSubmeshes(); submeshIn++)
+    {
+        const Array<Vec3i>& inds = indices(submeshIn);
+        for (int i = 0; i < inds.getSize(); i++)
+            for (int j = 0; j < 3; j++)
+                vertUsed[inds[i][j]] = 1;
+    }
+
+    // Compact vertex array.
+
+    Array<S32> vertRemap;
+    vertRemap.reset(numVertices());
+    memset(vertRemap.getPtr(), -1, vertRemap.getNumBytes());
+    U8* vertPtr = getMutableVertexPtr();
+    int vertStride = vertexStride();
+
+    int vertOut = 0;
+    for (int vertIn = 0; vertIn < vertUsed.getSize(); vertIn++)
+    {
+        if (!vertUsed[vertIn])
+            continue;
+
+        vertRemap[vertIn] = vertOut;
+        if (vertOut != vertIn)
+            memcpy(vertPtr + vertOut * vertStride, vertPtr + vertIn * vertStride, vertStride);
+        vertOut++;
+    }
+    resizeVertices(vertOut);
+
+    // Remap indices.
+
+    for (int submeshIdx = 0; submeshIdx < numSubmeshes(); submeshIdx++)
+    {
+        Array<Vec3i>& inds = mutableIndices(submeshIdx);
+        for (int i = 0; i < inds.getSize(); i++)
+            for (int j = 0; j < 3; j++)
+                inds[i][j] = vertRemap[inds[i][j]];
+    }
+}
+
+//------------------------------------------------------------------------
+
+void MeshBase::collapseVertices(void)
+{
+    // Collapse vertices.
+
+    int num = numVertices();
+    U8* vertPtr = getMutableVertexPtr();
+    int vertStride = vertexStride();
+
+    Hash<GenericHashKey, S32> hash;
+    Array<S32> remap;
+    hash.setCapacity(num);
+    remap.reset(num);
+
+    for (int i = 0; i < num; i++)
+    {
+        GenericHashKey key(vertPtr + i * vertStride, vertStride);
+        S32* found = hash.search(key);
+        if (found)
+            remap[i] = *found;
+        else
+        {
+            remap[i] = hash.getSize();
+            hash.add(key, remap[i]);
+            if (remap[i] != i)
+                memcpy(vertPtr + remap[i] * vertStride, vertPtr + i * vertStride, vertStride);
+        }
+    }
+
+    resizeVertices(hash.getSize());
+
+    // Remap indices.
+
+    for (int submeshIdx = 0; submeshIdx < numSubmeshes(); submeshIdx++)
+    {
+        Array<Vec3i>& inds = mutableIndices(submeshIdx);
+        for (int i = 0; i < inds.getSize(); i++)
+            for (int j = 0; j < 3; j++)
+                inds[i][j] = remap[inds[i][j]];
+    }
+}
+
+//------------------------------------------------------------------------
+
+void MeshBase::dupVertsPerSubmesh(void)
+{
+    // Find shared vertices and remap indices.
+
+    int num = numVertices();
+    Array<Vec2i> remap;
+    Array<S32> dup;
+    remap.reset(num);
+    memset(remap.getPtr(), -1, remap.getNumBytes());
+
+    for (int submeshIdx = 0; submeshIdx < numSubmeshes(); submeshIdx++)
+    {
+        Array<Vec3i>& inds = mutableIndices(submeshIdx);
+        for (int i = 0; i < inds.getSize(); i++)
+        for (int j = 0; j < 3; j++)
+        {
+            int v = inds[i][j];
+            if (remap[v].x != submeshIdx)
+            {
+                remap[v].x = submeshIdx;
+                if (remap[v].y == -1)
+                    remap[v].y = v;
+                else
+                {
+                    remap[v].y = num + dup.getSize();
+                    dup.add(v);
+                }
+            }
+            inds[i][j] = remap[v].y;
+        }
+    }
+
+    // Duplicate vertices.
+
+    resizeVertices(num + dup.getSize());
+    U8* vertPtr = getMutableVertexPtr();
+    int vertStride = vertexStride();
+
+    for (int i = 0; i < dup.getSize(); i++)
+        memcpy(vertPtr + (num + i) * vertStride, vertPtr + dup[i] * vertStride, vertStride);
+}
+
+//------------------------------------------------------------------------
+
+void MeshBase::fixMaterialColors(void)
+{
+    for (int submeshIdx = 0; submeshIdx < numSubmeshes(); submeshIdx++)
+    {
+        Material& mat = material(submeshIdx);
+        Texture tex = mat.textures[TextureType_Diffuse];
+        if (tex.exists())
+        {
+            Vec4f avg = tex.getMipLevel(64).getImage()->getVec4f(0);
+            mat.diffuse = Vec4f(avg.getXYZ(), mat.diffuse.w);
+        }
     }
 }
 
@@ -692,8 +888,8 @@ void MeshBase::simplify(F32 maxError)
     // Group vertices.
 
     Array<Vertex> verts(NULL, numVertices());
-    UnionFind posGroups(numVertices());
-    UnionFind outGroups(numVertices());
+    UnionFind posGroups(numVertices()); // by position
+    UnionFind outGroups(numVertices()); // by all attributes
     {
         Hash<Vec3f, S32> posHash;
         Hash<GenericHashKey, S32> outHash;
@@ -922,144 +1118,6 @@ void MeshBase::simplify(F32 maxError)
             else if (j != posAttrib)
                 v *= coef;
             setVertexAttrib(i, j, v);
-        }
-    }
-}
-
-//------------------------------------------------------------------------
-
-void MeshBase::clean(void)
-{
-    // Remove degenerate triangles and empty submeshes.
-
-    int submeshOut = 0;
-    for (int submeshIn = 0; submeshIn < numSubmeshes(); submeshIn++)
-    {
-        Array<Vec3i>& inds = mutableIndices(submeshIn);
-        int indOut = 0;
-        for (int i = 0; i < inds.getSize(); i++)
-        {
-            const Vec3i& v = inds[i];
-            if (v.x != v.y && v.x != v.z && v.y != v.z)
-                inds[indOut++] = v;
-        }
-
-        if (indOut)
-        {
-            inds.resize(indOut);
-            if (submeshOut != submeshIn)
-            {
-                material(submeshOut) = material(submeshIn);
-                mutableIndices(submeshOut) = inds;
-            }
-            mutableIndices(submeshOut).compact();
-            submeshOut++;
-        }
-    }
-    resizeSubmeshes(submeshOut);
-
-    // Tag referenced vertices.
-
-    Array<U8> vertUsed;
-    vertUsed.reset(numVertices());
-    memset(vertUsed.getPtr(), 0, vertUsed.getNumBytes());
-
-    for (int submeshIn = 0; submeshIn < numSubmeshes(); submeshIn++)
-    {
-        const Array<Vec3i>& inds = indices(submeshIn);
-        for (int i = 0; i < inds.getSize(); i++)
-            for (int j = 0; j < 3; j++)
-                vertUsed[inds[i][j]] = 1;
-    }
-
-    // Remap vertices.
-
-    Array<S32> vertRemap;
-    vertRemap.reset(numVertices());
-    memset(vertRemap.getPtr(), -1, vertRemap.getNumBytes());
-    U8* vertPtr = getMutableVertexPtr();
-    int vertStride = vertexStride();
-
-    int vertOut = 0;
-    for (int vertIn = 0; vertIn < vertUsed.getSize(); vertIn++)
-    {
-        if (!vertUsed[vertIn])
-            continue;
-
-        vertRemap[vertIn] = vertOut;
-        if (vertOut != vertIn)
-            memcpy(vertPtr + vertOut * vertStride, vertPtr + vertIn * vertStride, vertStride);
-        vertOut++;
-    }
-    resizeVertices(vertOut);
-
-    // Update index buffers.
-
-    for (int submeshIdx = 0; submeshIdx < numSubmeshes(); submeshIdx++)
-    {
-        Array<Vec3i>& inds = mutableIndices(submeshIdx);
-        for (int i = 0; i < inds.getSize(); i++)
-            for (int j = 0; j < 3; j++)
-                inds[i][j] = vertRemap[inds[i][j]];
-    }
-}
-
-//------------------------------------------------------------------------
-
-void MeshBase::dupVertsPerSubmesh(void)
-{
-    // Find shared vertices and remap indices.
-
-    int num = numVertices();
-    Array<Vec2i> remap;
-    Array<S32> dup;
-    remap.reset(num);
-    memset(remap.getPtr(), -1, remap.getNumBytes());
-
-    for (int submeshIdx = 0; submeshIdx < numSubmeshes(); submeshIdx++)
-    {
-        Array<Vec3i>& inds = mutableIndices(submeshIdx);
-        for (int i = 0; i < inds.getSize(); i++)
-        for (int j = 0; j < 3; j++)
-        {
-            int v = inds[i][j];
-            if (remap[v].x != submeshIdx)
-            {
-                remap[v].x = submeshIdx;
-                if (remap[v].y == -1)
-                    remap[v].y = v;
-                else
-                {
-                    remap[v].y = num + dup.getSize();
-                    dup.add(v);
-                }
-            }
-            inds[i][j] = remap[v].y;
-        }
-    }
-
-    // Duplicate vertices.
-
-    resizeVertices(num + dup.getSize());
-    U8* vertPtr = getMutableVertexPtr();
-    int vertStride = vertexStride();
-
-    for (int i = 0; i < dup.getSize(); i++)
-        memcpy(vertPtr + (num + i) * vertStride, vertPtr + dup[i] * vertStride, vertStride);
-}
-
-//------------------------------------------------------------------------
-
-void MeshBase::fixMaterialColors(void)
-{
-    for (int submeshIdx = 0; submeshIdx < numSubmeshes(); submeshIdx++)
-    {
-        Material& mat = material(submeshIdx);
-        Texture tex = mat.textures[TextureType_Diffuse];
-        if (tex.exists())
-        {
-            Vec4f avg = tex.getMipLevel(64).getImage()->getVec4f(0);
-            mat.diffuse = Vec4f(avg.getXYZ(), mat.diffuse.w);
         }
     }
 }

@@ -1,26 +1,34 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #pragma once
-#include "base/Defs.hpp"
+#include "base/DLLImports.hpp"
 
 #include <math.h>
-#pragma warning(push,3)
-#   include <vector_functions.h> // CUDA float4, etc.
-#pragma warning(pop)
 
 namespace FW
 {
@@ -119,26 +127,26 @@ public:
     FW_CUDA_FUNC    T&              get         (int idx)                   { FW_ASSERT(idx >= 0 && idx < L); return getPtr()[idx]; }
     FW_CUDA_FUNC    T               set         (int idx, const T& a)       { T& slot = get(idx); T old = slot; slot = a; return old; }
 
-    FW_CUDA_FUNC    void            set         (const T& a)                { for (int i = 0; i < L; i++) get(i) = a; }
-    FW_CUDA_FUNC    void            set         (const T* ptr)              { FW_ASSERT(ptr); for (int i = 0; i < L; i++) get(i) = ptr[i]; }
+    FW_CUDA_FUNC    void            set         (const T& a)                { T* tp = getPtr(); for (int i = 0; i < L; i++) tp[i] = a; }
+    FW_CUDA_FUNC    void            set         (const T* ptr)              { FW_ASSERT(ptr); T* tp = getPtr(); for (int i = 0; i < L; i++) tp[i] = ptr[i]; }
     FW_CUDA_FUNC    void            setZero     (void)                      { set((T)0); }
 
 #if !FW_CUDA
-                    void            print       (void) const                { for (int i = 0; i < L; i++) printf("%g\n", (F64)get(i)); }
+                    void            print       (void) const                { const T* tp = getPtr(); for (int i = 0; i < L; i++) printf("%g\n", (F64)tp[i]); }
 #endif
 
-    FW_CUDA_FUNC    bool            isZero      (void) const                { for (int i = 0; i < L; i++) if (get(i) != (T)0) return false; return true; }
-    FW_CUDA_FUNC    T               lenSqr      (void) const                { T r = (T)0; for (int i = 0; i < L; i++) r += sqr(get(i)); return r; }
+    FW_CUDA_FUNC    bool            isZero      (void) const                { const T* tp = getPtr(); for (int i = 0; i < L; i++) if (tp[i] != (T)0) return false; return true; }
+    FW_CUDA_FUNC    T               lenSqr      (void) const                { const T* tp = getPtr(); T r = (T)0; for (int i = 0; i < L; i++) r += sqr(tp[i]); return r; }
     FW_CUDA_FUNC    T               length      (void) const                { return sqrt(lenSqr()); }
     FW_CUDA_FUNC    S               normalized  (T len = (T)1) const        { return operator*(len * rcp(length())); }
     FW_CUDA_FUNC    void            normalize   (T len = (T)1)              { set(normalized(len)); }
-    FW_CUDA_FUNC    T               min         (void) const                { T r = get(0); for (int i = 1; i < L; i++) r = FW::min(r, get(i)); return r; }
-    FW_CUDA_FUNC    T               max         (void) const                { T r = get(0); for (int i = 1; i < L; i++) r = FW::max(r, get(i)); return r; }
-    FW_CUDA_FUNC    T               sum         (void) const                { T r = get(0); for (int i = 1; i < L; i++) r += get(i); return r; }
-    FW_CUDA_FUNC    S               abs         (void) const                { S r; for (int i = 0; i < L; i++) r.get(i) = FW::abs(get(i)); return r; }
+    FW_CUDA_FUNC    T               min         (void) const                { const T* tp = getPtr(); T r = tp[0]; for (int i = 1; i < L; i++) r = FW::min(r, tp[i]); return r; }
+    FW_CUDA_FUNC    T               max         (void) const                { const T* tp = getPtr(); T r = tp[0]; for (int i = 1; i < L; i++) r = FW::max(r, tp[i]); return r; }
+    FW_CUDA_FUNC    T               sum         (void) const                { const T* tp = getPtr(); T r = tp[0]; for (int i = 1; i < L; i++) r += tp[i]; return r; }
+    FW_CUDA_FUNC    S               abs         (void) const                { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = FW::abs(tp[i]); return r; }
 
-    FW_CUDA_FUNC    Vector<T, L + 1> toHomogeneous(void) const              { Vector<T, L + 1> r; for (int i = 0; i < L; i++) r.get(i) = get(i); r.get(L) = (T)1; return r; }
-    FW_CUDA_FUNC    Vector<T, L - 1> toCartesian(void) const                { Vector<T, L - 1> r; T c = rcp(get(L - 1)); for (int i = 0; i < L - 1; i++) r.get(i) = get(i) * c; return r; }
+    FW_CUDA_FUNC    Vector<T, L + 1> toHomogeneous(void) const              { const T* tp = getPtr(); Vector<T, L + 1> r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i]; rp[L] = (T)1; return r; }
+    FW_CUDA_FUNC    Vector<T, L - 1> toCartesian(void) const                { const T* tp = getPtr(); Vector<T, L - 1> r; T* rp = r.getPtr(); T c = rcp(tp[L - 1]); for (int i = 0; i < L - 1; i++) rp[i] = tp[i] * c; return r; }
 
     FW_CUDA_FUNC    const T&        operator[]  (int idx) const             { return get(idx); }
     FW_CUDA_FUNC    T&              operator[]  (int idx)                   { return get(idx); }
@@ -156,25 +164,25 @@ public:
     FW_CUDA_FUNC    S&              operator>>= (const T& a)                { set(operator>>(a)); return *(S*)this; }
 
     FW_CUDA_FUNC    S               operator+   (void) const                { return *this; }
-    FW_CUDA_FUNC    S               operator-   (void) const                { S r; for (int i = 0; i < L; i++) r.get(i) = -get(i); return r; }
-    FW_CUDA_FUNC    S               operator~   (void) const                { S r; for (int i = 0; i < L; i++) r.get(i) = ~get(i); return r; }
+    FW_CUDA_FUNC    S               operator-   (void) const                { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = -tp[i]; return r; }
+    FW_CUDA_FUNC    S               operator~   (void) const                { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = ~tp[i]; return r; }
 
-    FW_CUDA_FUNC    S               operator+   (const T& a) const          { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) + a; return r; }
-    FW_CUDA_FUNC    S               operator-   (const T& a) const          { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) - a; return r; }
-    FW_CUDA_FUNC    S               operator*   (const T& a) const          { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) * a; return r; }
-    FW_CUDA_FUNC    S               operator/   (const T& a) const          { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) / a; return r; }
-    FW_CUDA_FUNC    S               operator%   (const T& a) const          { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) % a; return r; }
-    FW_CUDA_FUNC    S               operator&   (const T& a) const          { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) & a; return r; }
-    FW_CUDA_FUNC    S               operator|   (const T& a) const          { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) | a; return r; }
-    FW_CUDA_FUNC    S               operator^   (const T& a) const          { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) ^ a; return r; }
-    FW_CUDA_FUNC    S               operator<<  (const T& a) const          { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) << a; return r; }
-    FW_CUDA_FUNC    S               operator>>  (const T& a) const          { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) >> a; return r; }
+    FW_CUDA_FUNC    S               operator+   (const T& a) const          { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] + a; return r; }
+    FW_CUDA_FUNC    S               operator-   (const T& a) const          { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] - a; return r; }
+    FW_CUDA_FUNC    S               operator*   (const T& a) const          { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] * a; return r; }
+    FW_CUDA_FUNC    S               operator/   (const T& a) const          { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] / a; return r; }
+    FW_CUDA_FUNC    S               operator%   (const T& a) const          { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] % a; return r; }
+    FW_CUDA_FUNC    S               operator&   (const T& a) const          { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] & a; return r; }
+    FW_CUDA_FUNC    S               operator|   (const T& a) const          { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] | a; return r; }
+    FW_CUDA_FUNC    S               operator^   (const T& a) const          { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] ^ a; return r; }
+    FW_CUDA_FUNC    S               operator<<  (const T& a) const          { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] << a; return r; }
+    FW_CUDA_FUNC    S               operator>>  (const T& a) const          { const T* tp = getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] >> a; return r; }
 
     template <class V> FW_CUDA_FUNC void    set         (const VectorBase<T, L, V>& v)          { set(v.getPtr()); }
-    template <class V> FW_CUDA_FUNC T       dot         (const VectorBase<T, L, V>& v) const    { T r = (T)0; for (int i = 0; i < L; i++) r += get(i) * v.get(i); return r; }
-    template <class V> FW_CUDA_FUNC S       min         (const VectorBase<T, L, V>& v) const    { S r; for (int i = 0; i < L; i++) r.get(i) = FW::min(get(i), v.get(i)); return r; }
-    template <class V> FW_CUDA_FUNC S       max         (const VectorBase<T, L, V>& v) const    { S r; for (int i = 0; i < L; i++) r.get(i) = FW::max(get(i), v.get(i)); return r; }
-    template <class V, class W> FW_CUDA_FUNC S clamp    (const VectorBase<T, L, V>& lo, const VectorBase<T, L, W>& hi) const { S r; for (int i = 0; i < L; i++) r.get(i) = FW::clamp(get(i), lo.get(i), hi.get(i)); return r; }
+    template <class V> FW_CUDA_FUNC T       dot         (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); T r = (T)0; for (int i = 0; i < L; i++) r += tp[i] * vp[i]; return r; }
+    template <class V> FW_CUDA_FUNC S       min         (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = FW::min(tp[i], vp[i]); return r; }
+    template <class V> FW_CUDA_FUNC S       max         (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = FW::max(tp[i], vp[i]); return r; }
+    template <class V, class W> FW_CUDA_FUNC S clamp    (const VectorBase<T, L, V>& lo, const VectorBase<T, L, W>& hi) const { const T* tp = getPtr(); const T* lop = lo.getPtr(); const T* hip = hi.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = FW::clamp(tp[i], lop[i], hip[i]); return r; }
 
     template <class V> FW_CUDA_FUNC S&      operator=   (const VectorBase<T, L, V>& v)          { set(v); return *(S*)this; }
     template <class V> FW_CUDA_FUNC S&      operator+=  (const VectorBase<T, L, V>& v)          { set(operator+(v)); return *(S*)this; }
@@ -188,18 +196,18 @@ public:
     template <class V> FW_CUDA_FUNC S&      operator<<= (const VectorBase<T, L, V>& v)          { set(operator<<(v)); return *(S*)this; }
     template <class V> FW_CUDA_FUNC S&      operator>>= (const VectorBase<T, L, V>& v)          { set(operator>>(v)); return *(S*)this; }
 
-    template <class V> FW_CUDA_FUNC S       operator+   (const VectorBase<T, L, V>& v) const    { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) + v.get(i); return r; }
-    template <class V> FW_CUDA_FUNC S       operator-   (const VectorBase<T, L, V>& v) const    { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) - v.get(i); return r; }
-    template <class V> FW_CUDA_FUNC S       operator*   (const VectorBase<T, L, V>& v) const    { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) * v.get(i); return r; }
-    template <class V> FW_CUDA_FUNC S       operator/   (const VectorBase<T, L, V>& v) const    { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) / v.get(i); return r; }
-    template <class V> FW_CUDA_FUNC S       operator%   (const VectorBase<T, L, V>& v) const    { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) % v.get(i); return r; }
-    template <class V> FW_CUDA_FUNC S       operator&   (const VectorBase<T, L, V>& v) const    { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) & v.get(i); return r; }
-    template <class V> FW_CUDA_FUNC S       operator|   (const VectorBase<T, L, V>& v) const    { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) | v.get(i); return r; }
-    template <class V> FW_CUDA_FUNC S       operator^   (const VectorBase<T, L, V>& v) const    { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) ^ v.get(i); return r; }
-    template <class V> FW_CUDA_FUNC S       operator<<  (const VectorBase<T, L, V>& v) const    { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) << v.get(i); return r; }
-    template <class V> FW_CUDA_FUNC S       operator>>  (const VectorBase<T, L, V>& v) const    { S r; for (int i = 0; i < L; i++) r.get(i) = get(i) >> v.get(i); return r; }
+    template <class V> FW_CUDA_FUNC S       operator+   (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] +  vp[i]; return r; }
+    template <class V> FW_CUDA_FUNC S       operator-   (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] -  vp[i]; return r; }
+    template <class V> FW_CUDA_FUNC S       operator*   (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] *  vp[i]; return r; }
+    template <class V> FW_CUDA_FUNC S       operator/   (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] /  vp[i]; return r; }
+    template <class V> FW_CUDA_FUNC S       operator%   (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] %  vp[i]; return r; }
+    template <class V> FW_CUDA_FUNC S       operator&   (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] &  vp[i]; return r; }
+    template <class V> FW_CUDA_FUNC S       operator|   (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] |  vp[i]; return r; }
+    template <class V> FW_CUDA_FUNC S       operator^   (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] ^  vp[i]; return r; }
+    template <class V> FW_CUDA_FUNC S       operator<<  (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] << vp[i]; return r; }
+    template <class V> FW_CUDA_FUNC S       operator>>  (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = tp[i] >> vp[i]; return r; }
 
-    template <class V> FW_CUDA_FUNC bool    operator==  (const VectorBase<T, L, V>& v) const    { for (int i = 0; i < L; i++) if (get(i) != v.get(i)) return false; return true; }
+    template <class V> FW_CUDA_FUNC bool    operator==  (const VectorBase<T, L, V>& v) const    { const T* tp = getPtr(); const T* vp = v.getPtr(); for (int i = 0; i < L; i++) if (tp[i] != vp[i]) return false; return true; }
     template <class V> FW_CUDA_FUNC bool    operator!=  (const VectorBase<T, L, V>& v) const    { return (!operator==(v)); }
 };
 
@@ -455,13 +463,13 @@ template <class T, int L, class S> FW_CUDA_FUNC S abs       (const VectorBase<T,
 template <class T, int L, class S> FW_CUDA_FUNC S operator+     (const T& a, const VectorBase<T, L, S>& b)  { return b + a; }
 template <class T, int L, class S> FW_CUDA_FUNC S operator-     (const T& a, const VectorBase<T, L, S>& b)  { return -b + a; }
 template <class T, int L, class S> FW_CUDA_FUNC S operator*     (const T& a, const VectorBase<T, L, S>& b)  { return b * a; }
-template <class T, int L, class S> FW_CUDA_FUNC S operator/     (const T& a, const VectorBase<T, L, S>& b)  { S r; for (int i = 0; i < L; i++) r.get(i) = a / b.get(i); return r; }
-template <class T, int L, class S> FW_CUDA_FUNC S operator%     (const T& a, const VectorBase<T, L, S>& b)  { S r; for (int i = 0; i < L; i++) r.get(i) = a % b.get(i); return r; }
+template <class T, int L, class S> FW_CUDA_FUNC S operator/     (const T& a, const VectorBase<T, L, S>& b)  { const T* bp = b.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = a / bp[i]; return r; }
+template <class T, int L, class S> FW_CUDA_FUNC S operator%     (const T& a, const VectorBase<T, L, S>& b)  { const T* bp = b.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = a % bp[i]; return r; }
 template <class T, int L, class S> FW_CUDA_FUNC S operator&     (const T& a, const VectorBase<T, L, S>& b)  { return b & a; }
 template <class T, int L, class S> FW_CUDA_FUNC S operator|     (const T& a, const VectorBase<T, L, S>& b)  { return b | a; }
 template <class T, int L, class S> FW_CUDA_FUNC S operator^     (const T& a, const VectorBase<T, L, S>& b)  { return b ^ a; }
-template <class T, int L, class S> FW_CUDA_FUNC S operator<<    (const T& a, const VectorBase<T, L, S>& b)  { S r; for (int i = 0; i < L; i++) r.get(i) = a << b.get(i); return r; }
-template <class T, int L, class S> FW_CUDA_FUNC S operator>>    (const T& a, const VectorBase<T, L, S>& b)  { S r; for (int i = 0; i < L; i++) r.get(i) = a >> b.get(i); return r; }
+template <class T, int L, class S> FW_CUDA_FUNC S operator<<    (const T& a, const VectorBase<T, L, S>& b)  { const T* bp = b.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = a << bp[i]; return r; }
+template <class T, int L, class S> FW_CUDA_FUNC S operator>>    (const T& a, const VectorBase<T, L, S>& b)  { const T* bp = b.getPtr(); S r; T* rp = r.getPtr(); for (int i = 0; i < L; i++) rp[i] = a >> bp[i]; return r; }
 
 template <class T, int L, class S, class V> FW_CUDA_FUNC T dot(const VectorBase<T, L, S>& a, const VectorBase<T, L, V>& b) { return a.dot(b); }
 
@@ -650,6 +658,10 @@ public:
     template <class V> FW_CUDA_FUNC Mat3f(const MatrixBase<F32, 3, V>& v) { set(v); }
     template <class V> FW_CUDA_FUNC Mat3f& operator=(const MatrixBase<F32, 3, V>& v) { set(v); return *this; }
 
+#if !FW_CUDA 
+	static			Mat3f			rotation	(const Vec3f& axis, F32 angle);		// Rotation of "angle" radians around "axis". Axis must be unit!
+#endif
+
 public:
     F32             m00, m10, m20;
     F32             m01, m11, m21;
@@ -671,7 +683,7 @@ public:
 #if !FW_CUDA
     Mat3f                           getXYZ      (void) const;
     static Mat4f                    fitToView   (const Vec2f& pos, const Vec2f& size, const Vec2f& viewSize);
-    static Mat4f                    perspective (F32 fov, F32 near, F32 far);
+    static Mat4f                    perspective (F32 fov, F32 nearDist, F32 farDist);
 #endif
 
     template <class V> FW_CUDA_FUNC Mat4f(const MatrixBase<F32, 4, V>& v) { set(v); }
@@ -721,6 +733,10 @@ public:
     static FW_CUDA_FUNC Mat3d       fromPtr     (const F64* ptr)            { Mat3d v; v.set(ptr); return v; }
 
     FW_CUDA_FUNC    operator        Mat3f       (void) const                { Mat3f r; for (int i = 0; i < 3 * 3; i++) r.set(i, (F32)get(i)); return r; }
+
+#if !FW_CUDA 
+	static			Mat3d			rotation	(const Vec3d& axis, F64 angle);		// Rotation of "angle" radians around "axis". Axis must be unit!
+#endif
 
     template <class V> FW_CUDA_FUNC Mat3d(const MatrixBase<F64, 3, V>& v) { set(v); }
     template <class V> FW_CUDA_FUNC Mat3d& operator=(const MatrixBase<F64, 3, V>& v) { set(v); return *this; }
@@ -799,21 +815,19 @@ FW_CUDA_CONST int c_popc8LUT[] =
 
 FW_CUDA_FUNC int popc8(U32 mask)
 {
-    FW_ASSERT(mask < (int)FW_ARRAY_SIZE(c_popc8LUT));
-    return c_popc8LUT[mask];
+    return c_popc8LUT[mask & 0xFFu];
 }
 
 FW_CUDA_FUNC int popc16(U32 mask)
 {
-    FW_ASSERT(mask < 0x00010000u);
-    return c_popc8LUT[mask & 0xffu] + c_popc8LUT[mask >> 8];
+    return c_popc8LUT[mask & 0xFFu] + c_popc8LUT[(mask >> 8) & 0xFFu];
 }
 
 FW_CUDA_FUNC int popc32(U32 mask)
 {
-    int result = c_popc8LUT[mask & 0xffu];
-    result += c_popc8LUT[(mask >> 8) & 0xffu];
-    result += c_popc8LUT[(mask >> 16) & 0xffu];
+    int result = c_popc8LUT[mask & 0xFFu];
+    result += c_popc8LUT[(mask >> 8) & 0xFFu];
+    result += c_popc8LUT[(mask >> 16) & 0xFFu];
     result += c_popc8LUT[mask >> 24];
     return result;
 }

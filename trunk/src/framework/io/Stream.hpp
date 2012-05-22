@@ -1,19 +1,30 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #pragma once
 #include "base/Array.hpp"
 #include "base/String.hpp"
@@ -40,8 +51,8 @@ public:
     U16                     readU16LE               (void)          { U8 b[2]; readFully(b, sizeof(b)); return (U16)((b[1] << 8) | b[0]); }
     U32                     readU32BE               (void)          { U8 b[4]; readFully(b, sizeof(b)); return (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]; }
     U32                     readU32LE               (void)          { U8 b[4]; readFully(b, sizeof(b)); return (b[3] << 24) | (b[2] << 16) | (b[1] << 8) | b[0]; }
-    U64                     readU64BE               (void)          { U8 b[8]; readFully(b, sizeof(b)); return ((U64)b[0] << 56) | ((U64)b[1] << 48) | ((U64)b[2] << 40) | ((U64)b[3] << 32) | (b[4] << 24) | (b[5] << 16) | (b[6] << 8) | b[7]; }
-    U64                     readU64LE               (void)          { U8 b[8]; readFully(b, sizeof(b)); return ((U64)b[7] << 56) | ((U64)b[6] << 48) | ((U64)b[5] << 40) | ((U64)b[4] << 32) | (b[3] << 24) | (b[2] << 16) | (b[1] << 8) | b[0]; }
+    U64                     readU64BE               (void)          { U8 b[8]; readFully(b, sizeof(b)); return ((U64)b[0] << 56) | ((U64)b[1] << 48) | ((U64)b[2] << 40) | ((U64)b[3] << 32) | ((U64)b[4] << 24) | ((U64)b[5] << 16) | ((U64)b[6] << 8) | (U64)b[7]; }
+    U64                     readU64LE               (void)          { U8 b[8]; readFully(b, sizeof(b)); return ((U64)b[7] << 56) | ((U64)b[6] << 48) | ((U64)b[5] << 40) | ((U64)b[4] << 32) | ((U64)b[3] << 24) | ((U64)b[2] << 16) | ((U64)b[1] << 8) | (U64)b[0]; }
 };
 
 //------------------------------------------------------------------------
@@ -69,7 +80,7 @@ public:
 class BufferedInputStream : public InputStream
 {
 public:
-                            BufferedInputStream     (InputStream& stream, int bufferSize = 4096);
+                            BufferedInputStream     (InputStream& stream, int bufferSize = 64 << 10);
     virtual                 ~BufferedInputStream    (void);
 
     virtual int             read                    (void* ptr, int size);
@@ -96,7 +107,7 @@ private:
 class BufferedOutputStream : public OutputStream
 {
 public:
-                            BufferedOutputStream    (OutputStream& stream, int bufferSize = 4096, bool writeOnLF = false, bool emulateCR = false);
+                            BufferedOutputStream    (OutputStream& stream, int bufferSize = 64 << 10, bool writeOnLF = false, bool emulateCR = false);
     virtual                 ~BufferedOutputStream   (void);
 
     virtual void            write                   (const void* ptr, int size);

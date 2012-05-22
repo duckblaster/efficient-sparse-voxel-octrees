@@ -1,26 +1,39 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #include "gui/Image.hpp"
+#include "gpu/CudaModule.hpp"
+#include "io/File.hpp"
 #include "io/ImageBinaryIO.hpp"
+#include "io/ImageLodePngIO.hpp"
 #include "io/ImageRawPngIO.hpp"
 #include "io/ImageTargaIO.hpp"
 #include "io/ImageTiffIO.hpp"
 #include "io/ImageBmpIO.hpp"
-#include "io/File.hpp"
 
 using namespace FW;
 
@@ -515,9 +528,18 @@ GLuint Image::createGLTexture(ImageFormat::ID desiredFormat, bool generateMipmap
 
 //------------------------------------------------------------------------
 
-CUarray Image::createCudaArray(ImageFormat::ID desiredFormat) const
+ImageFormat Image::chooseCudaFormat(CUDA_ARRAY_DESCRIPTOR* desc, ImageFormat::ID desiredFormat) const
 {
-    // Gather format requirements.
+#if (!FW_USE_CUDA)
+
+    FW_UNREF(desc);
+    FW_UNREF(desiredFormat);
+    fail("Image::chooseCudaFormat(): Built without FW_USE_CUDA!");
+    return m_format;
+
+#else
+
+    // Gather requirements.
 
     ImageFormat refFormat = m_format;
     if (desiredFormat != ImageFormat::ID_Max)
@@ -533,7 +555,7 @@ CUarray Image::createCudaArray(ImageFormat::ID desiredFormat) const
         isFloat = (chan.format == ImageFormat::ChannelFormat_Float);
     }
 
-    // Select CUDA format.
+    // Select format.
 
     CUarray_format datatype;
     int wordSize;
@@ -543,21 +565,60 @@ CUarray Image::createCudaArray(ImageFormat::ID desiredFormat) const
     else if (channelBits <= 16) datatype = CU_AD_FORMAT_UNSIGNED_INT16, wordSize = 2;
     else                        datatype = CU_AD_FORMAT_UNSIGNED_INT32, wordSize = 4;
 
-    ImageFormat cudaFormat;
+    ImageFormat formatA; // word per channel
+    ImageFormat formatB; // single word
+
     for (int i = 0; i < numChannels; i++)
     {
         const ImageFormat::Channel& ref = refFormat.getChannel(i);
-        ImageFormat::Channel chan;
 
+        ImageFormat::Channel chan;
         chan.type       = ref.type;
         chan.format     = (isFloat) ? ImageFormat::ChannelFormat_Float : ref.format;
+
         chan.wordOfs    = i * wordSize;
         chan.wordSize   = wordSize;
         chan.fieldOfs   = 0;
         chan.fieldSize  = wordSize * 8;
+        formatA.addChannel(chan);
 
-        cudaFormat.addChannel(chan);
+        chan.wordOfs    = 0;
+        chan.wordSize   = wordSize * numChannels;
+        chan.fieldOfs   = i * wordSize * 8;
+        chan.fieldSize  = wordSize * 8;
+        formatB.addChannel(chan);
     }
+
+    // Fill in the descriptor.
+
+    if (desc)
+    {
+        desc->Width         = m_size.x;
+        desc->Height        = m_size.y;
+        desc->Format        = datatype;
+        desc->NumChannels   = numChannels;
+    }
+    return (formatB == refFormat) ? formatB : formatA;
+
+#endif
+}
+
+//------------------------------------------------------------------------
+
+CUarray Image::createCudaArray(ImageFormat::ID desiredFormat) const
+{
+#if (!FW_USE_CUDA)
+
+    FW_UNREF(desiredFormat);
+    fail("Image::createCudaArray(): Built without FW_USE_CUDA!");
+    return NULL;
+
+#else
+
+    // Choose format.
+
+    CUDA_ARRAY_DESCRIPTOR arrayDesc;
+    ImageFormat cudaFormat = chooseCudaFormat(&arrayDesc, desiredFormat);
 
     // Image data not usable directly => convert.
 
@@ -568,17 +629,13 @@ CUarray Image::createCudaArray(ImageFormat::ID desiredFormat) const
         converted = new Image(max(m_size, 1), cudaFormat);
         converted->set(*this);
         img = converted;
+        arrayDesc.Width = img->getSize().x;
+        arrayDesc.Height = img->getSize().y;
     }
 
     // Create CUDA array.
 
     CudaModule::staticInit();
-
-    CUDA_ARRAY_DESCRIPTOR arrayDesc;
-    arrayDesc.Width         = img->getSize().x;
-    arrayDesc.Height        = img->getSize().y;
-    arrayDesc.Format        = datatype;
-    arrayDesc.NumChannels   = numChannels;
 
     CUarray cudaArray;
     CudaModule::checkError("cuArrayCreate", cuArrayCreate(&cudaArray, &arrayDesc));
@@ -602,6 +659,8 @@ CUarray Image::createCudaArray(ImageFormat::ID desiredFormat) const
 
     delete converted;
     return cudaArray;
+
+#endif
 }
 
 //------------------------------------------------------------------------
@@ -995,6 +1054,7 @@ Image* FW::importImage(const String& fileName)
 
 #define STREAM(CALL) { File file(fileName, File::Read); BufferedInputStream stream(file); return CALL; }
     if (lower.endsWith(".bin"))                             STREAM(importBinaryImage(stream))
+    if (lower.endsWith(".png"))                             STREAM(importLodePngImage(stream))
     if (lower.endsWith(".tga") || lower.endsWith(".targa")) STREAM(importTargaImage(stream))
     if (lower.endsWith(".tif") || lower.endsWith(".tiff"))  STREAM(importTiffImage(stream))
     if (lower.endsWith(".bmp"))                             STREAM(importBmpImage(stream))
@@ -1013,6 +1073,7 @@ void FW::exportImage(const String& fileName, const Image* image)
 
 #define STREAM(CALL) { File file(fileName, File::Create); BufferedOutputStream stream(file); CALL; stream.flush(); return; }
     if (lower.endsWith(".bin"))                             STREAM(exportBinaryImage(stream, image))
+    if (lower.endsWith(".png"))                             STREAM(exportLodePngImage(stream, image))
     if (lower.endsWith(".png"))                             STREAM(exportRawPngImage(stream, image))
     if (lower.endsWith(".tga") || lower.endsWith(".targa")) STREAM(exportTargaImage(stream, image))
     if (lower.endsWith(".tif") || lower.endsWith(".tiff"))  STREAM(exportTiffImage(stream, image))
@@ -1027,6 +1088,7 @@ void FW::exportImage(const String& fileName, const Image* image)
 String FW::getImageImportFilter(void)
 {
     return
+        "png:PNG Image,"
         "tga;targa:Targa Image,"
         "tif;tiff:TIFF Image,"
         "bmp:BMP Image,"

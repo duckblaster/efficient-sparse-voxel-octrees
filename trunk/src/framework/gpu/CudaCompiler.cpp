@@ -1,21 +1,31 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #include "gpu/CudaCompiler.hpp"
-#include "gpu/CudaModule.hpp"
 #include "base/DLLImports.hpp"
 #include "io/File.hpp"
 #include "gui/Window.hpp"
@@ -27,10 +37,12 @@ using namespace FW;
 
 //------------------------------------------------------------------------
 
+#define SHOW_TOOL_PATHS     1
 #define SHOW_NVCC_OUTPUT    0
 
 //------------------------------------------------------------------------
 
+String                  CudaCompiler::s_frameworkPath;
 String                  CudaCompiler::s_staticCudaBinPath;
 String                  CudaCompiler::s_staticOptions;
 String                  CudaCompiler::s_staticPreamble;
@@ -44,17 +56,72 @@ String                  CudaCompiler::s_nvccCommand;
 
 //------------------------------------------------------------------------
 
+String FW::formatInlineCuda(const char* file, int line, const char* code)
+{
+    static const char s_header[] =
+        "#include \"base/Math.hpp\"\n"
+        "#include <stdio.h>\n"
+        "namespace FW\n"
+        "{\n"
+        "extern \"C\"\n"
+        "{\n"
+    ;
+
+    static const char s_footer[] =
+        "}\n"
+        "}\n"
+        "\n"
+    ;
+
+    // Check that framework path is valid.
+
+    if (!CudaCompiler::getFrameworkPath().getLength())
+        fail("FW_INLINE_CUDA: Framework path not defined! Please call CudaCompiler::setFrameworkPath().");
+
+    // Replace backslashes with slashes in file name.
+
+    Array<char> fixedFile(file, (int)strlen(file) + 1);
+    for (int i = 0; i < fixedFile.getSize(); i++)
+        if (fixedFile[i] == '\\')
+            fixedFile[i] = '/';
+
+    // Count linefeeds.
+
+    int numLinefeeds = 0;
+    for (int i = 0; s_header[i]; i++)
+        if (s_header[i] == '\n')
+            numLinefeeds++;
+    for (int i = 0; code[i]; i++)
+        if (code[i] == '\n')
+            numLinefeeds++;
+
+    // Piece the code together.
+
+    return sprintf("#line %d \"%s\"\n%s%s%s\n", line - numLinefeeds, fixedFile.getPtr(), s_header, code, s_footer);
+}
+
+//------------------------------------------------------------------------
+
+CudaModule* FW::compileInlineCuda(const char* file, int line, const char* code)
+{
+    CudaCompiler compiler;
+    compiler.setInlineSource(formatInlineCuda(file, line, code), file);
+    compiler.addOptions("-use_fast_math");
+    return compiler.compile();
+}
+
+//------------------------------------------------------------------------
+
 CudaCompiler::CudaCompiler(void)
 :   m_cachePath             ("cudacache"),
-    m_sourceFile            ("unspecified.cu"),
     m_overriddenSMArch      (0),
 
-    m_sourceFileHash        (0),
+    m_sourceHash            (0),
     m_optionHash            (0),
     m_defineHash            (0),
     m_preambleHash          (0),
     m_memHash               (0),
-    m_sourceFileHashValid   (false),
+    m_sourceHashValid       (false),
     m_optionHashValid       (false),
     m_defineHashValid       (false),
     m_preambleHashValid     (false),
@@ -62,6 +129,8 @@ CudaCompiler::CudaCompiler(void)
 
     m_window                (NULL)
 {
+    if (getFrameworkPath().getLength())
+        include(getFrameworkPath());
 }
 
 //------------------------------------------------------------------------
@@ -72,7 +141,7 @@ CudaCompiler::~CudaCompiler(void)
 
 //------------------------------------------------------------------------
 
-CudaModule* CudaCompiler::compile(bool enablePrints)
+CudaModule* CudaCompiler::compile(bool enablePrints, bool autoFail)
 {
     staticInit();
 
@@ -85,7 +154,7 @@ CudaModule* CudaCompiler::compile(bool enablePrints)
 
     // Compile CUBIN file.
 
-    String cubinFile = compileCubinFile(enablePrints);
+    String cubinFile = compileCubinFile(enablePrints, autoFail);
     if (!cubinFile.getLength())
         return NULL;
 
@@ -98,7 +167,7 @@ CudaModule* CudaCompiler::compile(bool enablePrints)
 
 //------------------------------------------------------------------------
 
-const Array<U8>* CudaCompiler::compileCubin(bool enablePrints)
+const Array<U8>* CudaCompiler::compileCubin(bool enablePrints, bool autoFail)
 {
     staticInit();
 
@@ -111,7 +180,7 @@ const Array<U8>* CudaCompiler::compileCubin(bool enablePrints)
 
     // Compile CUBIN file.
 
-    String cubinFile = compileCubinFile(enablePrints);
+    String cubinFile = compileCubinFile(enablePrints, autoFail);
     if (!cubinFile.getLength())
         return NULL;
 
@@ -131,20 +200,27 @@ const Array<U8>* CudaCompiler::compileCubin(bool enablePrints)
 
 //------------------------------------------------------------------------
 
-String CudaCompiler::compileCubinFile(bool enablePrints)
+String CudaCompiler::compileCubinFile(bool enablePrints, bool autoFail)
 {
     staticInit();
 
     // Check that the source file exists.
-    {
+
+    if (m_sourceFile.getLength())
         File file(m_sourceFile, File::Read);
+    else if (!m_inlineSource.getLength())
+        setError("CudaCompiler: No source file specified!");
+
+    if (autoFail)
+        failIfError();
         if (hasError())
             return "";
-    }
 
     // Cache directory does not exist => create it.
 
     createCacheDir();
+    if (autoFail)
+        failIfError();
     if (hasError())
         return "";
 
@@ -153,6 +229,8 @@ String CudaCompiler::compileCubinFile(bool enablePrints)
     writeDefineFile();
     String cubinFile, finalOpts;
     runPreprocessor(cubinFile, finalOpts);
+    if (autoFail)
+        failIfError();
     if (hasError())
         return "";
 
@@ -164,7 +242,14 @@ String CudaCompiler::compileCubinFile(bool enablePrints)
     // Compile.
 
     if (enablePrints)
+    {
+        if (m_sourceFile.getLength())
         printf("CudaCompiler: Compiling '%s'...", m_sourceFile.getPtr());
+        else if (m_inlineOrigin.getLength())
+            printf("CudaCompiler: Compiling inline code from '%s'...", m_inlineOrigin.getPtr());
+        else
+            printf("CudaCompiler: Compiling inline code...");
+    }
     if (m_window)
         m_window->showModalMessage("Compiling CUDA kernel...\nThis will take a few seconds.");
 
@@ -172,6 +257,8 @@ String CudaCompiler::compileCubinFile(bool enablePrints)
 
     if (enablePrints)
         printf((hasError()) ? " Failed.\n" : " Done.\n");
+    if (autoFail)
+        failIfError();
     return (hasError()) ? "" : cubinFile;
 }
 
@@ -322,6 +409,17 @@ void CudaCompiler::staticInit(void)
     if (!vsIncPath.getLength())
         fail("Unable to detect Visual Studio include path!\nPlease run VCVARS32.BAT.");
 
+    // Show paths.
+
+#if SHOW_TOOL_PATHS
+    printf("\n");
+    printf("CUDA binary path:  \"%s\"\n", cudaBinPath.getPtr());
+    printf("CUDA include path: \"%s\"\n", cudaIncPath.getPtr());
+    printf("VS binary path:    \"%s\"\n", vsBinPath.getPtr());
+    printf("VS include path:   \"%s\"\n", vsIncPath.getPtr());
+    printf("\n");
+#endif
+
     // Form NVCC command line.
 
     s_nvccCommand = sprintf("set PATH=%s;%s & nvcc.exe -ccbin \"%s\" -I\"%s\" -I\"%s\" -I. -D_CRT_SECURE_NO_DEPRECATE",
@@ -336,6 +434,7 @@ void CudaCompiler::staticInit(void)
 
 void CudaCompiler::staticDeinit(void)
 {
+    s_frameworkPath         = "";
     s_staticCudaBinPath = "";
     s_staticOptions = "";
     s_staticPreamble = "";
@@ -368,11 +467,23 @@ void CudaCompiler::flushMemCache(void)
 
 String CudaCompiler::queryEnv(const String& name)
 {
-    char buffer[1024];
-    DWORD len = GetEnvironmentVariable(name.getPtr(), buffer, FW_ARRAY_SIZE(buffer));
-    if (len > 0 && len < FW_ARRAY_SIZE(buffer) - 1)
-        return buffer;
-    return "";
+    // Query buffer size.
+
+    DWORD bufferSize = GetEnvironmentVariable(name.getPtr(), NULL, 0);
+    if (!bufferSize)
+        return "";
+
+    // Query value.
+
+    char* buffer = new char[bufferSize];
+    buffer[0] = '\0';
+    GetEnvironmentVariable(name.getPtr(), buffer, bufferSize);
+
+    // Convert to String.
+
+    String res = buffer;
+    delete[] buffer;
+    return res;
 }
 
 //------------------------------------------------------------------------
@@ -431,10 +542,10 @@ U64 CudaCompiler::getMemHash(void)
     if (m_memHashValid)
         return m_memHash;
 
-    if (!m_sourceFileHashValid)
+    if (!m_sourceHashValid)
     {
-        m_sourceFileHash = hash<String>(m_sourceFile);
-        m_sourceFileHashValid = true;
+        m_sourceHash = hashBits(hash<String>(m_sourceFile), hash<String>(m_inlineSource));
+        m_sourceHashValid = true;
     }
 
     if (!m_optionHashValid)
@@ -462,7 +573,7 @@ U64 CudaCompiler::getMemHash(void)
         m_preambleHashValid = true;
     }
 
-    U32 a = FW_HASH_MAGIC + m_sourceFileHash;
+    U32 a = FW_HASH_MAGIC + m_sourceHash;
     U32 b = FW_HASH_MAGIC + m_optionHash;
     U32 c = FW_HASH_MAGIC + m_preambleHash;
     FW_JENKINS_MIX(a, b, c);
@@ -513,12 +624,15 @@ void CudaCompiler::initLogFile(const String& name, const String& firstLine)
 
 void CudaCompiler::runPreprocessor(String& cubinFile, String& finalOpts)
 {
-    // Preprocess.
+    // Determine preprocessor options.
 
     finalOpts = "";
     if (s_staticOptions.getLength())
         finalOpts += s_staticOptions + " ";
     finalOpts += m_options;
+    finalOpts = fixOptions(finalOpts);
+
+    // Preprocess.
 
     String logFile = m_cachePath + "\\preprocess.log";
     String cmd = sprintf("%s -E -o \"%s\\preprocessed.cu\" -include \"%s\\defines.inl\" %s \"%s\" 2>>\"%s\"",
@@ -526,7 +640,7 @@ void CudaCompiler::runPreprocessor(String& cubinFile, String& finalOpts)
         m_cachePath.getPtr(),
         m_cachePath.getPtr(),
         finalOpts.getPtr(),
-        m_sourceFile.getPtr(),
+        saveSource().getPtr(),
         logFile.getPtr());
 
     initLogFile(logFile, cmd);
@@ -544,9 +658,8 @@ void CudaCompiler::runPreprocessor(String& cubinFile, String& finalOpts)
         finalOpts += "-cubin";
     finalOpts += " ";
 
-    // Hash and find inline compiler options.
+    // Hash preprocessed source.
 
-    String optionPrefix = "// EMIT_NVCC_OPTIONS ";
     File file(m_cachePath + "\\preprocessed.cu", File::Read);
     BufferedInputStream in(file);
 
@@ -565,59 +678,26 @@ void CudaCompiler::runPreprocessor(String& cubinFile, String& finalOpts)
         while (*linePtr == ' ' || *linePtr == '\t')
             linePtr++;
 
-        // Directive or empty => ignore.
+        // Empty, directive, or comment => ignore.
 
-        if (*linePtr == '#' || *linePtr == '\0')
-            continue;
+        if (*linePtr == '\0') continue;
+        if (*linePtr == '#') continue;
+        if (*linePtr == '/' && linePtr[1] == '/') continue;
 
-        // Compiler option directive => record.
+        // Hash.
 
-        String line(linePtr);
-        if (line.startsWith(optionPrefix))
-            finalOpts += line.substring(optionPrefix.getLength()) + " ";
-
-        // Not a comment => hash.
-
-        else if (!line.startsWith("//"))
-        {
-            hashA += hash<String>(line);
-            FW_JENKINS_MIX(hashA, hashB, hashC);
-        }
-    }
-
-    // Override SM architecture.
-
-    S32 smArch = m_overriddenSMArch;
-    if (!smArch)
-        smArch = CudaModule::getComputeCapability();
-
-    finalOpts = removeOption(finalOpts, "-arch", true);
-    finalOpts = removeOption(finalOpts, "--gpu-architecture", true);
-    finalOpts += sprintf("-arch sm_%d ", smArch);
-
-    // Override pointer width.
-    // CUDA 3.2 => requires -m32 for x86 build and -m64 for x64 build.
-
-    if (CudaModule::getDriverVersion() >= 32)
-    {
-        finalOpts = removeOption(finalOpts, "-m32", false);
-        finalOpts = removeOption(finalOpts, "-m64", false);
-        finalOpts = removeOption(finalOpts, "--machine", true);
-
-#if FW_64
-        finalOpts += "-m64 ";
-#else
-        finalOpts += "-m32 ";
-#endif
+        hashA += hash<String>(String(linePtr));
+        FW_JENKINS_MIX(hashA, hashB, hashC);
     }
 
     // Hash final compiler options and version.
 
+    finalOpts = fixOptions(finalOpts);
     hashA += hash<String>(finalOpts);
     hashB += s_nvccVersionHash;
-    FW_JENKINS_MIX(hashA, hashB, hashC);
+            FW_JENKINS_MIX(hashA, hashB, hashC);
     cubinFile = sprintf("%s\\%08x%08x.cubin", m_cachePath.getPtr(), hashB, hashC);
-}
+        }
 
 //------------------------------------------------------------------------
 
@@ -629,7 +709,7 @@ void CudaCompiler::runCompiler(const String& cubinFile, const String& finalOpts)
         cubinFile.getPtr(),
         m_cachePath.getPtr(),
         finalOpts.getPtr(),
-        m_sourceFile.getPtr(),
+        saveSource().getPtr(),
         logFile.getPtr());
 
     initLogFile(logFile, cmd);
@@ -641,6 +721,54 @@ void CudaCompiler::runCompiler(const String& cubinFile, const String& finalOpts)
     printf("%s\n", getError().getPtr());
     clearError();
 #endif
+    }
+
+//------------------------------------------------------------------------
+
+String CudaCompiler::fixOptions(String opts)
+{
+    // Override SM architecture.
+
+    S32 smArch = m_overriddenSMArch;
+    if (!smArch && CudaModule::isAvailable())
+        smArch = CudaModule::getComputeCapability();
+
+    if (smArch)
+    {
+        opts = removeOption(opts, "-arch", true);
+        opts = removeOption(opts, "--gpu-architecture", true);
+        opts += sprintf("-arch sm_%d ", smArch);
+    }
+
+    // Override pointer width.
+    // CUDA 3.2 => requires -m32 for x86 build and -m64 for x64 build.
+
+    if (CudaModule::getDriverVersion() >= 32)
+    {
+        opts = removeOption(opts, "-m32", false);
+        opts = removeOption(opts, "-m64", false);
+        opts = removeOption(opts, "--machine", true);
+
+#if FW_64
+        opts += "-m64 ";
+#else
+        opts += "-m32 ";
+#endif
+    }
+    return opts;
+}
+
+//------------------------------------------------------------------------
+
+String CudaCompiler::saveSource(void)
+{
+    if (!m_inlineSource.getLength())
+        return m_sourceFile;
+
+    String path = m_cachePath + "\\inline.cu";
+    File file(path, File::Create);
+    file.write(m_inlineSource.getPtr(), m_inlineSource.getLength());
+    return path;
 }
 
 //------------------------------------------------------------------------

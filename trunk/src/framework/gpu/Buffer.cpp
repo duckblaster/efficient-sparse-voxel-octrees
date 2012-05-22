@@ -1,20 +1,32 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #include "gpu/Buffer.hpp"
+#include "gpu/CudaModule.hpp"
 
 using namespace FW;
 
@@ -43,10 +55,10 @@ void Buffer::wrapGL(GLuint glBuffer)
     {
         GLint oldBuffer;
         glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldBuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, glBuffer);
-    glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &size);
+        glBindBuffer(GL_ARRAY_BUFFER, glBuffer);
+        glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &size);
         glBindBuffer(GL_ARRAY_BUFFER, oldBuffer);
-    GLContext::checkErrors();
+        GLContext::checkErrors();
     }
 
     m_glBuffer = glBuffer;
@@ -99,6 +111,41 @@ void Buffer::free(Module module)
 
 //------------------------------------------------------------------------
 
+void Buffer::getRange(void* dst, S64 srcOfs, S64 size, bool async, CUstream cudaStream) const
+{
+    FW_ASSERT(dst || !size);
+    FW_ASSERT(srcOfs >= 0 && srcOfs <= m_size - size);
+    FW_ASSERT(size >= 0);
+
+    if (!size)
+        return;
+
+    switch (m_owner)
+    {
+    case GL:
+        {
+            GLint oldBuffer;
+            glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldBuffer);
+            glBindBuffer(GL_ARRAY_BUFFER, m_glBuffer);
+            glGetBufferSubData(GL_ARRAY_BUFFER, (GLintptr)srcOfs, (GLsizeiptr)size, dst);
+            glBindBuffer(GL_ARRAY_BUFFER, oldBuffer);
+            GLContext::checkErrors();
+        }
+        break;
+
+    case Cuda:
+        memcpyDtoH(dst, m_cudaPtr + (U32)srcOfs, (U32)size, async, cudaStream);
+        break;
+
+    default:
+        if ((m_exists & CPU) != 0)
+            memcpy(dst, m_cpuPtr + srcOfs, (size_t)size);
+        break;
+    }
+}
+
+//------------------------------------------------------------------------
+
 void Buffer::setRange(S64 dstOfs, const void* src, S64 size, bool async, CUstream cudaStream)
 {
     FW_ASSERT(dstOfs >= 0 && dstOfs <= m_size - size);
@@ -114,10 +161,10 @@ void Buffer::setRange(S64 dstOfs, const void* src, S64 size, bool async, CUstrea
         {
             GLint oldBuffer;
             glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldBuffer);
-        glBindBuffer(GL_ARRAY_BUFFER, getMutableGLBuffer());
-        glBufferSubData(GL_ARRAY_BUFFER, (GLintptr)dstOfs, (GLsizeiptr)size, src);
+            glBindBuffer(GL_ARRAY_BUFFER, getMutableGLBuffer());
+            glBufferSubData(GL_ARRAY_BUFFER, (GLintptr)dstOfs, (GLsizeiptr)size, src);
             glBindBuffer(GL_ARRAY_BUFFER, oldBuffer);
-        GLContext::checkErrors();
+            GLContext::checkErrors();
         }
         break;
 
@@ -166,40 +213,6 @@ void Buffer::clearRange(S64 dstOfs, int value, S64 size, bool async, CUstream cu
         CudaModule::checkError("cuMemsetD8", cuMemsetD8(getMutableCudaPtr(dstOfs), (U8)value, (U32)size));
     else
         memset(getMutablePtr(dstOfs), value, (size_t)size);
-}
-
-//------------------------------------------------------------------------
-
-void Buffer::getRange(void* dst, S64 srcOfs, S64 size, bool async, CUstream cudaStream) const
-{
-    FW_ASSERT(dst || !size);
-    FW_ASSERT(srcOfs >= 0 && srcOfs <= m_size - size);
-    FW_ASSERT(size >= 0);
-
-    if (!size)
-        return;
-
-    switch (m_owner)
-    {
-    case GL:
-        {
-            GLint oldBuffer;
-            glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldBuffer);
-        glBindBuffer(GL_ARRAY_BUFFER, m_glBuffer);
-        glGetBufferSubData(GL_ARRAY_BUFFER, (GLintptr)srcOfs, (GLsizeiptr)size, dst);
-            glBindBuffer(GL_ARRAY_BUFFER, oldBuffer);
-        GLContext::checkErrors();
-        }
-        break;
-
-    case Cuda:
-        memcpyDtoH(dst, m_cudaPtr + (U32)srcOfs, (U32)size, async, cudaStream);
-        break;
-
-    default:
-        memcpy(dst, m_cpuPtr + srcOfs, (size_t)size);
-        break;
-    }
 }
 
 //------------------------------------------------------------------------
@@ -390,6 +403,13 @@ U32 Buffer::validateHints(U32 hints, int align, Module original)
 
 void Buffer::deinit(void)
 {
+    // Wrapped buffer => ensure that the original is up-to-date.
+
+    if (m_original != Module_None)
+        setOwner(m_original, false);
+
+    // Free buffers.
+
     if (m_original != Cuda)
         cudaFree(m_cudaPtr, m_cudaBase, m_glBuffer, m_hints);
 

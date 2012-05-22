@@ -1,19 +1,30 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #include "base/Thread.hpp"
 
 using namespace FW;
@@ -22,7 +33,7 @@ using namespace FW;
 
 Spinlock            Thread::s_lock;
 Hash<U32, Thread*>  Thread::s_threads;
-Thread*             Thread::s_mainThread    = NULL;
+Thread*             Thread::s_mainThread = NULL;
 
 //------------------------------------------------------------------------
 
@@ -96,18 +107,28 @@ Monitor::Monitor(void)
     m_enterCount    (0),
     m_waitCount     (0)
 {
+    InitializeCriticalSection(&m_mutex);
+    if (isAvailable_InitializeConditionVariable())
+        InitializeConditionVariable(&m_condition);
 }
 
 //------------------------------------------------------------------------
 
 Monitor::~Monitor(void)
 {
+    DeleteCriticalSection(&m_mutex);
 }
 
 //------------------------------------------------------------------------
 
 void Monitor::enter(void)
 {
+    if (isAvailable_InitializeConditionVariable())
+    {
+        EnterCriticalSection(&m_mutex);
+    }
+    else
+    {
     U32 currThread = Thread::getID();
 
     m_lock.enter();
@@ -122,21 +143,35 @@ void Monitor::enter(void)
     m_enterCount++;
     m_lock.leave();
 }
+}
 
 //------------------------------------------------------------------------
 
 void Monitor::leave(void)
 {
+    if (isAvailable_InitializeConditionVariable())
+    {
+        LeaveCriticalSection(&m_mutex);
+    }
+    else
+    {
     FW_ASSERT(m_ownerThread == Thread::getID() && m_enterCount);
     m_enterCount--;
     if (!m_enterCount)
         m_ownerSem.release();
+}
 }
 
 //------------------------------------------------------------------------
 
 void Monitor::wait(void)
 {
+    if (isAvailable_InitializeConditionVariable())
+    {
+        SleepConditionVariableCS(&m_condition, &m_mutex, INFINITE);
+    }
+    else
+    {
     FW_ASSERT(m_ownerThread == Thread::getID() && m_enterCount);
     U32 currThread = m_ownerThread;
     int enterCount = m_enterCount;
@@ -155,11 +190,18 @@ void Monitor::wait(void)
     m_enterCount = enterCount;
     m_lock.leave();
 }
+}
 
 //------------------------------------------------------------------------
 
 void Monitor::notify(void)
 {
+    if (isAvailable_InitializeConditionVariable())
+    {
+        WakeConditionVariable(&m_condition);
+    }
+    else
+    {
     FW_ASSERT(m_ownerThread == Thread::getID() && m_enterCount);
     if (m_waitCount)
     {
@@ -167,17 +209,25 @@ void Monitor::notify(void)
         m_notifySem.acquire();
     }
 }
+}
 
 //------------------------------------------------------------------------
 
 void Monitor::notifyAll(void)
 {
+    if (isAvailable_InitializeConditionVariable())
+    {
+        WakeAllConditionVariable(&m_condition);
+    }
+    else
+    {
     FW_ASSERT(m_ownerThread == Thread::getID() && m_enterCount);
     while (m_waitCount)
     {
         m_waitSem.release();
         m_notifySem.acquire();
     }
+}
 }
 
 //------------------------------------------------------------------------
@@ -204,7 +254,7 @@ Thread::~Thread(void)
         refer();
         m_exited = true;
         unrefer();
-}
+    }
 
     // Deinit user data.
 
@@ -324,11 +374,11 @@ bool Thread::isAlive(void)
 
     if (m_handle)
     {
-    DWORD exitCode;
+        DWORD exitCode;
         if (!GetExitCodeThread(m_handle, &exitCode))
-        failWin32Error("GetExitCodeThread");
+            failWin32Error("GetExitCodeThread");
 
-    if (exitCode == STILL_ACTIVE)
+        if (exitCode == STILL_ACTIVE)
             alive = true;
         else
             m_exited = true;
@@ -436,7 +486,7 @@ void Thread::unrefer(void)
     {
         m_exited = false;
         exited();
-}
+    }
     m_lock.leave();
 }
 
@@ -445,9 +495,9 @@ void Thread::unrefer(void)
 void Thread::started(void)
 {
     m_id = getID();
-    m_handle = OpenThread(THREAD_ALL_ACCESS, FALSE, m_id);
-    if (!m_handle)
-        failWin32Error("OpenThread");
+    HANDLE process = GetCurrentProcess();
+    if (!DuplicateHandle(process, GetCurrentThread(), process, &m_handle, THREAD_ALL_ACCESS, FALSE, 0))
+        failWin32Error("DuplicateHandle");
 
     s_lock.enter();
 

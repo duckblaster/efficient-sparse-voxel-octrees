@@ -1,24 +1,38 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #include "gui/Window.hpp"
+#include "gui/Image.hpp"
 #include "gpu/GLContext.hpp"
 #include "base/Thread.hpp"
 
 #include <commdlg.h>
+#include <ShlObj.h>
+#include <ShellAPI.h>
 
 using namespace FW;
 
@@ -43,6 +57,7 @@ Window::Window(void)
 
     m_isRealized        (false),
     m_isVisible         (true),
+	m_enablePaste		(false),
 
     m_title             (s_defaultTitle),
     m_isFullScreen      (false),
@@ -246,6 +261,20 @@ void Window::repaintNow(void)
 void Window::requestClose(void)
 {
     PostMessage(m_hwnd, WM_CLOSE, 0, 0);
+}
+
+//------------------------------------------------------------------------
+
+void Window::enableDrop(bool enable)
+{
+	DragAcceptFiles(m_hwnd, enable);
+}
+
+//------------------------------------------------------------------------
+
+void Window::enablePaste(bool enable)
+{
+	m_enablePaste = enable;
 }
 
 //------------------------------------------------------------------------
@@ -545,6 +574,24 @@ void Window::pollMessages(void)
 
 //------------------------------------------------------------------------
 
+Window::Event Window::createFileEvent(EventType type, HANDLE hDrop)
+{
+	Event ev = createSimpleEvent(type);
+	for(int idx = 0; ; idx++)
+	{
+		int len = DragQueryFile((HDROP)hDrop, idx, 0, 0);
+		if (!len)
+			break;
+		char* buf = new char[len+1];
+		DragQueryFile((HDROP)hDrop, idx, buf, len+1);
+		ev.files.add(String(buf));
+		delete[] buf;
+	}
+	return ev;
+}
+
+//------------------------------------------------------------------------
+
 Window::Event Window::createGenericEvent(EventType type, const String& key, S32 chr, bool mouseKnown, const Vec2i& mousePos)
 {
     Event ev;
@@ -556,6 +603,7 @@ Window::Event Window::createGenericEvent(EventType type, const String& key, S32 
     ev.mousePos         = mousePos;
     ev.mouseDelta       = (mouseKnown && m_mouseKnown) ? mousePos - m_mousePos : 0;
     ev.mouseDragging    = isMouseDragging();
+	ev.image			= NULL;
     ev.window           = this;
     return ev;
 }
@@ -582,6 +630,9 @@ void Window::postEvent(const Event& ev)
             if (hasError() || m_listeners[i]->handleEvent(ev))
                 break;
     }
+
+	if (ev.image)
+		delete ev.image;
 
     failIfError();
 }
@@ -641,8 +692,11 @@ void Window::recreate(void)
 
 LRESULT CALLBACK Window::staticWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    incNestingLevel(1);
     Window* win = (Window*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-    return win->windowProc(uMsg, wParam, lParam);
+    LRESULT res = win->windowProc(uMsg, wParam, lParam);
+    incNestingLevel(-1);
+    return res;
 }
 
 //------------------------------------------------------------------------
@@ -694,6 +748,60 @@ LRESULT Window::windowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_SYSKEYDOWN:
     case WM_SYSKEYUP:
         {
+			// Paste.
+
+			if (m_enablePaste && uMsg == WM_KEYDOWN)
+			{
+				if ((wParam == 'V' && GetKeyState(VK_CONTROL) < 0) ||
+					(wParam == VK_INSERT && GetKeyState(VK_SHIFT) < 0))
+				{
+					if (OpenClipboard(m_hwnd))
+					{
+						if (IsClipboardFormatAvailable(CF_HDROP))
+						{
+							postEvent(createFileEvent(EventType_PasteFiles, (HDROP)GetClipboardData(CF_HDROP)));
+						}
+						else if (IsClipboardFormatAvailable(CF_DIB))
+						{
+							BITMAPINFO* bminfo = (BITMAPINFO*)GetClipboardData(CF_DIB);
+							BITMAPINFOHEADER& hdr = bminfo->bmiHeader;
+							Vec2i size(hdr.biWidth, hdr.biHeight);
+							bool flip = (size.y < 0);
+							if (flip)
+								size.y = -size.y;
+							U8*    p   = (U8*)bminfo->bmiColors;
+							Image* img = 0;
+							if (hdr.biCompression == 0)
+							{
+								if (hdr.biBitCount == 24)
+								{
+									// set alpha to 255
+									img = new Image(size);
+									for (int y=0; y < size.y; y++, p = (U8*)(((U64)p + 3) & ~(U64)3))
+									for (int x=0; x < size.x; x++, p += 3)
+										img->setABGR(Vec2i(x, flip ? y : (size.y - y - 1)), (p[0] << 16) | (p[1] << 8) | p[2] | 0xff000000u);
+								} else if (hdr.biBitCount == 32)
+								{
+									// untested
+									img = new Image(size);
+									for (int y=0; y < size.y; y++)
+									for (int x=0; x < size.x; x++, p += 4)
+										img->setABGR(Vec2i(x, flip ? y : (size.y - y - 1)), (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]);
+								}
+							}
+							if (img)
+							{
+								Event ev = createSimpleEvent(EventType_PasteImage);
+								ev.image = img;
+								postEvent(ev);
+							}
+						}
+						CloseClipboard();
+					}
+					return 0;
+				}
+			}
+
             // Post key event.
 
             bool down = (uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN);
@@ -808,6 +916,10 @@ LRESULT Window::windowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             m_mouseWheelAcc += 120;
         }
         return 0;
+
+	case WM_DROPFILES:
+		postEvent(createFileEvent(EventType_DropFiles, (HDROP)wParam));
+		return 0;
 
     default:
         break;

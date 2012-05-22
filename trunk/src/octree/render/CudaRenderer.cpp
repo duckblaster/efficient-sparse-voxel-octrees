@@ -1,19 +1,30 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #include "CudaRenderer.hpp"
 
 using namespace FW;
@@ -25,6 +36,7 @@ CudaRenderer::CudaRenderer(void)
     m_numWarps          (256) // initial guess
 {
     m_compiler.setSourceFile("src/octree/cuda/Render.cu");
+    m_compiler.addOptions("-use_fast_math");
     m_compiler.include("src/framework");
     clearResults();
 }
@@ -239,20 +251,11 @@ String CudaRenderer::renderObject(
     F32 blurTime = 0.f;
     if (m_params.enableBlur)
     {
-        Vec2i blockSize = Vec2i(8, 8);
-        Vec2i gridSize  = (frame.getSize() + blockSize + 1) / blockSize;
-
         // restore true frame buffer pointer
         m_input.frame = frame.getBuffer().getMutableCudaPtr();
 
         // get module
         CudaModule* module = m_compiler.compile();
-        failIfError();
-
-        // find kernel function
-        CUfunction blurKernel = module->getKernel("blurKernel", 0);
-        if (!blurKernel)
-            fail("CudaRenderer: Blur kernel not found!");
 
         // update blur LUT
         Vec4i* pLUT = (Vec4i*)module->getGlobal("c_blurLUT").getMutablePtr();
@@ -272,9 +275,9 @@ String CudaRenderer::renderObject(
         module->setTexRef("texAASamplesIn", m_aaSampleBuffer, CU_AD_FORMAT_UNSIGNED_INT8, 4);
 
         // launch
-        blurTime = module->launchKernelTimed(blurKernel, blockSize, gridSize, true);
+        blurTime = module->getKernel("blurKernel").launchTimed(frame.getSize(), Vec2i(8));
 
-        }
+    }
 
     // Update statistics.
 
@@ -439,10 +442,6 @@ CudaRenderer::LaunchResult CudaRenderer::launch(int totalWork, bool persistentTh
     // Compile kernel.
 
     CudaModule* module = m_compiler.compile();
-    failIfError();
-    CUfunction kernel = module->getKernel("kernel", 0);
-    if (!kernel)
-        fail("CudaRenderer: Kernel not found!");
 
     // Update globals.
 
@@ -455,7 +454,7 @@ CudaRenderer::LaunchResult CudaRenderer::launch(int totalWork, bool persistentTh
     // Launch.
 
     LaunchResult res;
-    res.time = module->launchKernelTimed(kernel, blockSize, gridSize, true, NULL, (!m_params.measureRaycastPerf));
+    res.time = module->getKernel("kernel").launchTimed(gridSize * blockSize, blockSize, (!m_params.measureRaycastPerf));
 
     // Determine results.
 

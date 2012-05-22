@@ -1,21 +1,31 @@
 /*
- *  Copyright 2009-2010 NVIDIA Corporation
+ *  Copyright (c) 2009-2011, NVIDIA Corporation
+ *  All rights reserved.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *      * Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *      * Neither the name of NVIDIA Corporation nor the
+ *        names of its contributors may be used to endorse or promote products
+ *        derived from this software without specific prior written permission.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ *  DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+ *  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #pragma once
-#include "gpu/CudaModule.hpp"
 #include "io/Stream.hpp"
 
 namespace FW
@@ -46,7 +56,9 @@ public:
 
 public:
     explicit        Buffer              (U32 hints = Hint_None)                 { init(0, hints, 1); }
-    explicit        Buffer              (const void* ptr, S64 size, U32 hints = Hint_None, int align = 1) { init(size, hints, align); if (ptr) setRange(0, ptr, size); }
+    explicit        Buffer              (const void* ptr, S64 size, U32 hints = Hint_None, int align = 1) { init(size, hints, align); if (ptr) set(ptr); }
+    template <class T> explicit Buffer  (const Array<T>& data, U32 hints = Hint_None, int align = 1) { init(data.getNumBytes(), hints, align); set(data.getPtr()); }
+    template <class T> explicit Buffer  (const Array<T>& data, int start, int end, U32 hints = Hint_None, int align = 1) { init((end - start) * sizeof(T), hints, align); set(data.getPtr(start)); }
                     Buffer              (Buffer& other)                         { init(other.getSize(), other.getHints(), other.getAlign()); setRange(0, other, 0, other.getSize()); }
     virtual         ~Buffer             (void)                                  { deinit(); }
 
@@ -71,13 +83,19 @@ public:
     void            resizeDiscard       (S64 size)                              { if (m_size != size) reset(NULL, size, m_hints, m_align); }
     void            free                (Module module);
 
+    void            getRange            (void* dst, S64 srcOfs, S64 size, bool async = false, CUstream cudaStream = NULL) const;
+    void            get                 (void* ptr)                             { getRange(ptr, 0, getSize()); }
+    template <class T> void get         (Array<T>& data)                        { FW_ASSERT(data.getNumBytes() == getSize()); get(data.getPtr()); }
+
     void            setRange            (S64 dstOfs, const void* src, S64 size, bool async = false, CUstream cudaStream = NULL);
     void            setRange            (S64 dstOfs, Buffer& src, S64 srcOfs, S64 size, bool async = false, CUstream cudaStream = NULL);
-    void            clearRange          (S64 dstOfs, int value, S64 size, bool async = false, CUstream cudaStream = NULL);
-    void            getRange            (void* dst, S64 srcOfs, S64 size, bool async = false, CUstream cudaStream = NULL) const;
-
+    void            set                 (const void* ptr)                       { setRange(0, ptr, getSize()); }
     void            set                 (const void* ptr, S64 size)             { resizeDiscard(size); setRange(0, ptr, size); }
     void            set                 (Buffer& other)                         { if (&other != this) { resizeDiscard(other.getSize()); setRange(0, other, 0, other.getSize()); } }
+    template <class T> void set         (const Array<T>& data)                  { set(data.getPtr(), data.getNumBytes()); }
+    template <class T> void set         (const Array<T>& data, int start, int end) { set(data.getPtr(start), (end - start) * sizeof(T)); }
+
+    void            clearRange          (S64 dstOfs, int value, S64 size, bool async = false, CUstream cudaStream = NULL);
     void            clear               (int value = 0)                         { clearRange(0, value, m_size); }
 
     void            setOwner            (Module module, bool modify, bool async = false, CUstream cudaStream = NULL, S64 validSize = -1);
